@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CalendarDays, Home, Menu, Shield, Sparkles, Users, X } from "lucide-react";
 import { DonateMenu } from "@/components/donate-menu";
+import { InstallAppCta } from "@/components/install-app-cta";
 import { navItems } from "@/components/nav-links";
 
 const navIcons = {
@@ -78,6 +79,10 @@ export function MobileNav() {
               </Link>
             );
           })}
+        </div>
+
+        <div className="mt-5">
+          <InstallAppCta compact />
         </div>
 
         <div className="mt-5 rounded-[22px] border border-[#10131a]/10 bg-white p-3 shadow-sm">

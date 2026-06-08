@@ -1,12 +1,10 @@
 import { AppShell } from "@/components/app-shell";
+import { InstallAppCta } from "@/components/install-app-cta";
 import {
   LiveStack,
   PageIntro,
   PredictionStrip,
   PriorityMatch,
-  ShareCardSeed,
-  TeamPathPanel,
-  UpdateFeed,
   WatchFlow,
 } from "@/components/ui";
 import { getTodayDashboard } from "@/lib/pulse90-data";
@@ -43,10 +41,8 @@ export default async function Home() {
 
         <aside className="min-w-0 space-y-5">
           <LiveStack matches={dashboard.liveMatches} />
-          <UpdateFeed compact items={dashboard.updates} />
-          <TeamPathPanel />
+          <InstallAppCta />
           <PredictionStrip items={dashboard.predictions.slice(0, 3)} />
-          <ShareCardSeed />
         </aside>
       </div>
     </AppShell>

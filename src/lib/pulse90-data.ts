@@ -551,18 +551,13 @@ export async function getTodayDashboard() {
     return fallbackToday();
   }
 
-  const [fixturesResult, updatesResult, predictionsResult, teamFlags] = await Promise.all([
+  const [fixturesResult, predictionsResult, teamFlags] = await Promise.all([
     supabase
       .from("fixture_cards_view")
       .select("*")
       .in("status", ["scheduled", "live"])
       .order("starts_at", { ascending: true })
       .limit(12),
-    supabase
-      .from("updates")
-      .select("*")
-      .order("published_at", { ascending: false })
-      .limit(8),
     supabase
       .from("predictions")
       .select("*")
@@ -571,7 +566,7 @@ export async function getTodayDashboard() {
     getFixtureTeamFlags(),
   ]);
 
-  if (fixturesResult.error || updatesResult.error || predictionsResult.error) {
+  if (fixturesResult.error || predictionsResult.error) {
     return fallbackToday();
   }
 
@@ -585,7 +580,7 @@ export async function getTodayDashboard() {
     liveMatches: mappedLive,
     todayMatches: mappedMatches.length ? mappedMatches : todayMatches,
     tomorrowMatches: mappedMatches.slice(0, 3).map(mapTomorrowItem),
-    updates: (updatesResult.data as UpdateRow[]).map(mapUpdate),
+    updates: [],
     predictions: (predictionsResult.data as PredictionRow[]).map(mapPrediction),
   };
 }
