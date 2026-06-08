@@ -1,0 +1,849 @@
+import { getSupabaseReadClient } from "@/lib/supabase/server";
+import {
+  getMatch,
+  getTeam,
+  liveMatches,
+  predictions,
+  type Match,
+  type Prediction,
+  type Team,
+  teams,
+  todayMatches,
+  tomorrowMatches,
+  updates,
+} from "@/lib/mock-data";
+
+type FixtureCardRow = {
+  match_number: number;
+  status: "scheduled" | "live" | "completed" | "postponed" | "cancelled";
+  minute: number | null;
+  starts_at: string;
+  stage: string;
+  group_code: string | null;
+  home_score: number | null;
+  away_score: number | null;
+  importance_score: number | null;
+  importance_reason: string | null;
+  stakes: string | null;
+  implication: string | null;
+  home_team: string | null;
+  away_team: string | null;
+  venue: string | null;
+  host_city: string | null;
+};
+
+type UpdateRow = {
+  label?: string;
+  update_type: string;
+  title: string;
+  summary: string;
+  impact: string | null;
+};
+
+type PredictionRow = {
+  prediction_type: string;
+  label: string;
+  movement_label: string | null;
+  movement_value: number | null;
+};
+
+type TeamPathRow = {
+  id: string;
+  slug: string;
+  name: string;
+  group_code: string | null;
+  status: string;
+  identity: string | null;
+  coach: string | null;
+  captain: string | null;
+  qualification_status: string | null;
+  next_match_number: number | null;
+  next_match_starts_at: string | null;
+  next_opponent: string | null;
+};
+
+type PlayerRow = {
+  name: string;
+  known_as: string | null;
+  position: string;
+  roster_role: string | null;
+  shirt_number: number | null;
+  club: string | null;
+  status: string;
+};
+
+type HistoryGoalRow = {
+  team_name: string;
+  scorer: string;
+  minute: number | null;
+  own_goal: boolean;
+  penalty: boolean;
+};
+
+type HistoryMatchRow = {
+  match_date: string;
+  competition: string;
+  city: string | null;
+  country: string | null;
+  home_team_name: string;
+  away_team_name: string;
+  home_score: number;
+  away_score: number;
+  team_history_goals?: HistoryGoalRow[];
+};
+
+type SquadPlayer = {
+  name: string;
+  position: string;
+  positionCode: string;
+  shirtNumber: number | null;
+  club: string;
+  status: string;
+};
+
+export type RecentTeamGoal = {
+  minute: number | null;
+  ownGoal: boolean;
+  penalty: boolean;
+  scorer: string;
+  team: string;
+};
+
+export type RecentTeamMatch = {
+  away: string;
+  awayScore: number;
+  competition: string;
+  date: string;
+  location: string;
+  goals: RecentTeamGoal[];
+  home: string;
+  homeScore: number;
+  result: "D" | "L" | "W";
+};
+
+export type DirectoryTeam = {
+  confederation: string;
+  flagAssetUrl: string | null;
+  flagEmoji: string;
+  group: string;
+  name: string;
+  region: string;
+  slug: string;
+};
+
+type AppTeam = Team & {
+  squad: SquadPlayer[];
+};
+
+type TeamRow = {
+  id: string;
+  slug: string;
+  name: string;
+  fifa_code: string;
+  flag_asset_url?: string | null;
+  flag_emoji?: string | null;
+  group_code: string | null;
+  confederation: string;
+  status: string;
+};
+
+type StandingRow = {
+  team_id: string;
+  group_code: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goals_for: number;
+  goals_against: number;
+  goal_difference: number;
+  points: number;
+  rank: number | null;
+  qualification_status: string | null;
+};
+
+type LiveGroupProjectionRow = {
+  team_id: string;
+  slug: string;
+  name: string;
+  fifa_code: string;
+  flag_emoji: string | null;
+  flag_asset_url: string | null;
+  group_code: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goals_for: number;
+  goals_against: number;
+  goal_difference: number;
+  points: number;
+  projected_rank: number;
+};
+
+const flagByFifaCode: Record<string, string> = {
+  ALG: "🇩🇿",
+  ARG: "🇦🇷",
+  AUS: "🇦🇺",
+  AUT: "🇦🇹",
+  BEL: "🇧🇪",
+  BIH: "🇧🇦",
+  BRA: "🇧🇷",
+  CAN: "🇨🇦",
+  CIV: "🇨🇮",
+  COD: "🇨🇩",
+  COL: "🇨🇴",
+  CPV: "🇨🇻",
+  CRO: "🇭🇷",
+  CUW: "🇨🇼",
+  CZE: "🇨🇿",
+  ECU: "🇪🇨",
+  EGY: "🇪🇬",
+  ENG: "🏴",
+  ESP: "🇪🇸",
+  FRA: "🇫🇷",
+  GER: "🇩🇪",
+  GHA: "🇬🇭",
+  HAI: "🇭🇹",
+  IRN: "🇮🇷",
+  IRQ: "🇮🇶",
+  JOR: "🇯🇴",
+  JPN: "🇯🇵",
+  KOR: "🇰🇷",
+  KSA: "🇸🇦",
+  MAR: "🇲🇦",
+  MEX: "🇲🇽",
+  NED: "🇳🇱",
+  NOR: "🇳🇴",
+  NZL: "🇳🇿",
+  PAN: "🇵🇦",
+  PAR: "🇵🇾",
+  POR: "🇵🇹",
+  QAT: "🇶🇦",
+  RSA: "🇿🇦",
+  SCO: "🏴",
+  SEN: "🇸🇳",
+  SUI: "🇨🇭",
+  SWE: "🇸🇪",
+  TUN: "🇹🇳",
+  TUR: "🇹🇷",
+  URU: "🇺🇾",
+  USA: "🇺🇸",
+  UZB: "🇺🇿",
+};
+
+const flagCodeByFifaCode: Record<string, string> = {
+  ALG: "dz",
+  ARG: "ar",
+  AUS: "au",
+  AUT: "at",
+  BEL: "be",
+  BIH: "ba",
+  BRA: "br",
+  CAN: "ca",
+  CIV: "ci",
+  COD: "cd",
+  COL: "co",
+  CPV: "cv",
+  CRO: "hr",
+  CUW: "cw",
+  CZE: "cz",
+  ECU: "ec",
+  EGY: "eg",
+  ENG: "gb-eng",
+  ESP: "es",
+  FRA: "fr",
+  GER: "de",
+  GHA: "gh",
+  HAI: "ht",
+  IRN: "ir",
+  IRQ: "iq",
+  JOR: "jo",
+  JPN: "jp",
+  KOR: "kr",
+  KSA: "sa",
+  MAR: "ma",
+  MEX: "mx",
+  NED: "nl",
+  NOR: "no",
+  NZL: "nz",
+  PAN: "pa",
+  PAR: "py",
+  POR: "pt",
+  QAT: "qa",
+  RSA: "za",
+  SCO: "gb-sct",
+  SEN: "sn",
+  SUI: "ch",
+  SWE: "se",
+  TUN: "tn",
+  TUR: "tr",
+  URU: "uy",
+  USA: "us",
+  UZB: "uz",
+};
+
+function flagFor(code: string, storedFlag?: string | null) {
+  return storedFlag ?? flagByFifaCode[code] ?? "🏳";
+}
+
+function flagAssetFor(code: string, storedAsset?: string | null) {
+  const flagCode = flagCodeByFifaCode[code];
+
+  return storedAsset ?? (flagCode ? `https://flagcdn.com/w80/${flagCode}.png` : null);
+}
+
+function regionForConfederation(confederation: string) {
+  const regions: Record<string, string> = {
+    AFC: "Asia",
+    CAF: "Africa",
+    CONCACAF: "North America",
+    CONMEBOL: "South America",
+    OFC: "Oceania",
+    UEFA: "Europe",
+  };
+
+  return regions[confederation] ?? confederation;
+}
+
+function formatKickoff(startsAt: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/Chicago",
+  }).format(new Date(startsAt));
+}
+
+function formatMatchDate(startsAt: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "America/Chicago",
+  }).format(new Date(startsAt));
+}
+
+function mapFixture(row: FixtureCardRow): Match {
+  const home = row.home_team ?? "TBD";
+  const away = row.away_team ?? "TBD";
+  const status =
+    row.status === "live" || row.status === "completed" ? row.status : "scheduled";
+
+  return {
+    matchNumber: row.match_number,
+    status,
+    minute: row.minute ? `${row.minute}'` : undefined,
+    date: formatMatchDate(row.starts_at),
+    time: row.status === "live" ? "Live" : formatKickoff(row.starts_at),
+    home,
+    away,
+    score:
+      row.home_score === null || row.away_score === null
+        ? undefined
+        : `${row.home_score}-${row.away_score}`,
+    place: row.host_city ?? "TBD",
+    venue: row.venue ?? "TBD",
+    stage: row.stage,
+    group: row.group_code ? `Group ${row.group_code}` : row.stage,
+    tag: row.importance_reason ?? "Watch",
+    reason: row.importance_reason ?? "Tournament context",
+    stakes: row.stakes ?? "Context is being reviewed.",
+    implication: row.implication ?? "Result implications will update soon.",
+    heat: row.importance_score ?? 50,
+  };
+}
+
+function mapUpdate(row: UpdateRow) {
+  return {
+    label: row.update_type.replaceAll("_", " "),
+    title: row.title,
+    detail: row.summary,
+    impact: row.impact ?? "Tournament context updated",
+  };
+}
+
+function mapPrediction(row: PredictionRow): Prediction {
+  return {
+    label: row.prediction_type.replaceAll("_", " "),
+    subject: row.label,
+    movement: row.movement_label ?? "0%",
+    tone: (row.movement_value ?? 0) >= 0 ? "up" : "down",
+  };
+}
+
+function mapTomorrowItem(match: Match, index: number) {
+  const slots = ["Next up", "Host watch", "Group opener", "Plan around"];
+
+  return {
+    slot: slots[index] ?? "Upcoming",
+    match: `${match.home} vs ${match.away}`,
+    date: match.date,
+    time: match.time,
+    note: match.stakes,
+  };
+}
+
+function mapTeam(row: TeamPathRow, squad: SquadPlayer[] = []): AppTeam {
+  const next = row.next_opponent
+    ? `vs ${row.next_opponent}${row.next_match_starts_at ? `, ${formatKickoff(row.next_match_starts_at)}` : ""}`
+    : "Next match pending";
+
+  return {
+    slug: row.slug,
+    name: row.name,
+    group: row.group_code ? `Group ${row.group_code}` : "Group TBD",
+    status: row.qualification_status ?? row.status,
+    next,
+    need:
+      row.qualification_status === "in_danger"
+        ? "They need a result to avoid depending on other matches."
+        : "Current path is being tracked from standings and fixtures.",
+    identity: row.identity ?? "Tournament identity will update as data fills in.",
+    coach: row.coach ?? "TBD",
+    captain: row.captain ?? "TBD",
+    keyPlayers: squad.slice(0, 5).map((player) => player.name),
+    squad,
+    history: "",
+  };
+}
+
+function mapPlayer(row: PlayerRow): SquadPlayer {
+  return {
+    name: row.known_as ?? row.name,
+    position: row.position,
+    positionCode: row.roster_role ?? row.position.slice(0, 2).toUpperCase(),
+    shirtNumber: row.shirt_number,
+    club: row.club ?? "Club TBD",
+    status: row.status,
+  };
+}
+
+function mapHistoryMatch(row: HistoryMatchRow, teamName: string): RecentTeamMatch {
+  const isHome = row.home_team_name === teamName;
+  const goalsFor = isHome ? row.home_score : row.away_score;
+  const goalsAgainst = isHome ? row.away_score : row.home_score;
+  const result = goalsFor > goalsAgainst ? "W" : goalsFor < goalsAgainst ? "L" : "D";
+
+  return {
+    away: row.away_team_name,
+    awayScore: row.away_score,
+    competition: row.competition,
+    date: new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(`${row.match_date}T00:00:00Z`)),
+    location: [row.city, row.country].filter(Boolean).join(", ") || "Location TBD",
+    goals: (row.team_history_goals ?? [])
+      .map((goal) => ({
+        minute: goal.minute,
+        ownGoal: goal.own_goal,
+        penalty: goal.penalty,
+        scorer: goal.scorer,
+        team: goal.team_name,
+      }))
+      .sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999)),
+    home: row.home_team_name,
+    homeScore: row.home_score,
+    result,
+  };
+}
+
+function fallbackToday() {
+  return {
+    source: "mock" as const,
+    liveMatches,
+    todayMatches,
+    tomorrowMatches,
+    updates,
+    predictions,
+  };
+}
+
+export async function getTodayDashboard() {
+  const supabase = getSupabaseReadClient();
+
+  if (!supabase) {
+    return fallbackToday();
+  }
+
+  const [fixturesResult, updatesResult, predictionsResult] = await Promise.all([
+    supabase
+      .from("fixture_cards_view")
+      .select("*")
+      .in("status", ["scheduled", "live"])
+      .order("starts_at", { ascending: true })
+      .limit(12),
+    supabase
+      .from("updates")
+      .select("*")
+      .order("published_at", { ascending: false })
+      .limit(8),
+    supabase
+      .from("predictions")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(8),
+  ]);
+
+  if (fixturesResult.error || updatesResult.error || predictionsResult.error) {
+    return fallbackToday();
+  }
+
+  const mappedMatches = (fixturesResult.data as FixtureCardRow[]).map(mapFixture);
+  const mappedLive = mappedMatches.filter((match) => match.status === "live");
+
+  return {
+    source: "supabase" as const,
+    liveMatches: mappedLive,
+    todayMatches: mappedMatches.length ? mappedMatches : todayMatches,
+    tomorrowMatches: mappedMatches.slice(0, 3).map(mapTomorrowItem),
+    updates: (updatesResult.data as UpdateRow[]).map(mapUpdate),
+    predictions: (predictionsResult.data as PredictionRow[]).map(mapPrediction),
+  };
+}
+
+export async function getFixtureExplorer() {
+  const supabase = getSupabaseReadClient();
+
+  if (!supabase) {
+    return { matches: todayMatches };
+  }
+
+  const result = await supabase
+    .from("fixture_cards_view")
+    .select("*")
+    .order("starts_at", { ascending: true })
+    .limit(104);
+
+  if (result.error) {
+    return { matches: todayMatches };
+  }
+
+  return { matches: (result.data as FixtureCardRow[]).map(mapFixture) };
+}
+
+export async function getTomorrowPlan() {
+  const { matches } = await getFixtureExplorer();
+
+  return {
+    items: matches.slice(0, 6).map(mapTomorrowItem),
+  };
+}
+
+export async function getTeamsDirectory() {
+  const supabase = getSupabaseReadClient();
+
+  if (!supabase) {
+    return {
+      teams: teams.map((team) => ({
+        confederation: "Mixed",
+        flagAssetUrl: null,
+        flagEmoji: "🏳",
+        group: team.group,
+        name: team.name,
+        region: "All Teams",
+        slug: team.slug,
+      })),
+    };
+  }
+
+  const result = await supabase
+    .from("teams")
+    .select("slug, name, fifa_code, flag_emoji, flag_asset_url, group_code, confederation")
+    .order("group_code", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (result.error) {
+    return { teams: [] as DirectoryTeam[] };
+  }
+
+  return {
+    teams: (result.data as TeamRow[]).map((team) => ({
+      confederation: team.confederation,
+      flagAssetUrl: flagAssetFor(team.fifa_code, team.flag_asset_url),
+      flagEmoji: flagFor(team.fifa_code, team.flag_emoji),
+      group: team.group_code ? `Group ${team.group_code}` : "Group TBD",
+      name: team.name,
+      region: regionForConfederation(team.confederation),
+      slug: team.slug,
+    })),
+  };
+}
+
+export async function getTeamPath(slug: string) {
+  const supabase = getSupabaseReadClient();
+
+  if (!supabase) {
+    const team = getTeam(slug);
+    return {
+      team: team ? { ...team, squad: [] } : undefined,
+      matches: todayMatches,
+      history: [] as RecentTeamMatch[],
+    };
+  }
+
+  const [teamResult, fixturesResult, playersResult] = await Promise.all([
+    supabase.from("team_path_view").select("*").eq("slug", slug).single(),
+    supabase.from("fixture_cards_view").select("*").limit(104),
+    supabase
+      .from("players")
+      .select("name, known_as, position, roster_role, shirt_number, club, status, teams!inner(slug)")
+      .eq("teams.slug", slug)
+      .order("shirt_number", { ascending: true }),
+  ]);
+
+  if (teamResult.error || fixturesResult.error || !teamResult.data) {
+    const team = getTeam(slug);
+    return {
+      team: team ? { ...team, squad: [] } : undefined,
+      matches: todayMatches,
+      history: [] as RecentTeamMatch[],
+    };
+  }
+
+  const squad = playersResult.error
+    ? []
+    : (playersResult.data as unknown as PlayerRow[]).map(mapPlayer);
+  const team = mapTeam(teamResult.data as TeamPathRow, squad);
+  const historyResult = await supabase
+    .from("team_history_matches")
+    .select(
+      "match_date, competition, city, country, home_team_name, away_team_name, home_score, away_score, team_history_goals(team_name, scorer, minute, own_goal, penalty)",
+    )
+    .or(`home_team_id.eq.${teamResult.data.id},away_team_id.eq.${teamResult.data.id}`)
+    .order("match_date", { ascending: false })
+    .limit(12);
+  const matches = (fixturesResult.data as FixtureCardRow[])
+    .map(mapFixture)
+    .filter((match) => match.home === team.name || match.away === team.name);
+  const history = historyResult.error
+    ? []
+    : (historyResult.data as unknown as HistoryMatchRow[]).map((row) =>
+        mapHistoryMatch(row, team.name),
+      );
+
+  return { team, matches, history };
+}
+
+export async function getMatchCenter(matchNumber: string) {
+  const supabase = getSupabaseReadClient();
+
+  if (!supabase) {
+    return { match: getMatch(matchNumber) };
+  }
+
+  const result = await supabase
+    .from("fixture_cards_view")
+    .select("*")
+    .eq("match_number", Number(matchNumber))
+    .single();
+
+  if (result.error || !result.data) {
+    return { match: getMatch(matchNumber) };
+  }
+
+  return { match: mapFixture(result.data as FixtureCardRow) };
+}
+
+export async function getUpdatesFeed() {
+  const supabase = getSupabaseReadClient();
+
+  if (!supabase) {
+    return { updates: [] };
+  }
+
+  const result = await supabase
+    .from("updates")
+    .select("*")
+    .order("published_at", { ascending: false })
+    .limit(50);
+
+  if (result.error) {
+    return { updates: [] };
+  }
+
+  return { updates: (result.data as UpdateRow[]).map(mapUpdate) };
+}
+
+export async function getPredictionHub() {
+  const supabase = getSupabaseReadClient();
+
+  if (!supabase) {
+    return { predictions: [] };
+  }
+
+  const result = await supabase
+    .from("predictions")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (result.error) {
+    return { predictions: [] };
+  }
+
+  return { predictions: (result.data as PredictionRow[]).map(mapPrediction) };
+}
+
+export async function getGroupsBoard() {
+  const supabase = getSupabaseReadClient();
+
+  if (!supabase) {
+    const grouped = teams.reduce<Record<string, typeof teams>>((acc, team) => {
+      const groupCode = team.group.replace("Group ", "");
+      acc[groupCode] ??= [];
+      acc[groupCode].push(team);
+      return acc;
+    }, {});
+
+    return {
+      groups: Object.entries(grouped).map(([groupCode, groupTeams]) => ({
+        groupCode,
+        teams: groupTeams.map((team, index) => ({
+          slug: team.slug,
+          name: team.name,
+          fifaCode: team.name.slice(0, 3).toUpperCase(),
+          flagEmoji: "🏳",
+          flagAssetUrl: null,
+          played: 0,
+          goalDifference: 0,
+          points: 0,
+          rank: index + 1,
+          qualificationStatus: "not_started",
+        })),
+      })),
+    };
+  }
+
+  const liveProjectionResult = await supabase
+    .from("live_group_projection_view")
+    .select("*")
+    .order("group_code", { ascending: true })
+    .order("projected_rank", { ascending: true });
+
+  if (!liveProjectionResult.error && liveProjectionResult.data?.length) {
+    const groups = new Map<
+      string,
+      Array<{
+        slug: string;
+        name: string;
+        fifaCode: string;
+        flagEmoji: string;
+        flagAssetUrl: string | null;
+        played: number;
+        goalDifference: number;
+        points: number;
+        rank: number | null;
+        qualificationStatus: string;
+      }>
+    >();
+
+    for (const row of liveProjectionResult.data as LiveGroupProjectionRow[]) {
+      groups.set(row.group_code, [
+        ...(groups.get(row.group_code) ?? []),
+        {
+          slug: row.slug,
+          name: row.name,
+          fifaCode: row.fifa_code,
+          flagEmoji: flagFor(row.fifa_code, row.flag_emoji),
+          flagAssetUrl: flagAssetFor(row.fifa_code, row.flag_asset_url),
+          played: row.played,
+          goalDifference: row.goal_difference,
+          points: row.points,
+          rank: row.projected_rank,
+          qualificationStatus:
+            row.played === 0
+              ? "not_started"
+              : row.projected_rank <= 2
+                ? "advancing"
+                : row.projected_rank === 3
+                  ? "third_place_watch"
+                  : "in_danger",
+        },
+      ]);
+    }
+
+    return {
+      groups: Array.from(groups.entries()).map(([groupCode, groupTeams]) => ({
+        groupCode,
+        teams: groupTeams,
+      })),
+    };
+  }
+
+  const [teamsResult, standingsResult] = await Promise.all([
+    supabase
+      .from("teams")
+      .select("id, slug, name, fifa_code, group_code, confederation, status")
+      .order("group_code", { ascending: true })
+      .order("name", { ascending: true }),
+    supabase.from("standings").select("*"),
+  ]);
+
+  if (teamsResult.error || standingsResult.error) {
+    return { groups: [] };
+  }
+
+  const standingsByTeam = new Map(
+    (standingsResult.data as StandingRow[]).map((standing) => [
+      standing.team_id,
+      standing,
+    ]),
+  );
+
+  const groups = new Map<
+    string,
+    Array<{
+      slug: string;
+      name: string;
+      fifaCode: string;
+      flagEmoji: string;
+      flagAssetUrl: string | null;
+      confederation: string;
+      played: number;
+      goalDifference: number;
+      points: number;
+      rank: number | null;
+      qualificationStatus: string;
+    }>
+  >();
+
+  for (const team of teamsResult.data as TeamRow[]) {
+    const groupCode = team.group_code ?? "TBD";
+    const standing = standingsByTeam.get(team.id);
+    groups.set(groupCode, [
+      ...(groups.get(groupCode) ?? []),
+      {
+        slug: team.slug,
+        name: team.name,
+        fifaCode: team.fifa_code,
+        flagEmoji: flagFor(team.fifa_code, team.flag_emoji),
+        flagAssetUrl: flagAssetFor(team.fifa_code),
+        confederation: team.confederation,
+        played: standing?.played ?? 0,
+        goalDifference: standing?.goal_difference ?? 0,
+        points: standing?.points ?? 0,
+        rank: standing?.rank ?? null,
+        qualificationStatus: standing?.qualification_status ?? "not_started",
+      },
+    ]);
+  }
+
+  return {
+    groups: Array.from(groups.entries()).map(([groupCode, groupTeams]) => ({
+      groupCode,
+      teams: groupTeams.sort((a, b) => {
+        const rankA = a.rank ?? 99;
+        const rankB = b.rank ?? 99;
+        return (
+          rankA - rankB ||
+          b.points - a.points ||
+          b.goalDifference - a.goalDifference ||
+          a.name.localeCompare(b.name)
+        );
+      }),
+    })),
+  };
+}

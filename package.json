@@ -1,0 +1,33 @@
+{
+  "name": "pulse90",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "seed:worldcup": "node scripts/seed-real-world-cup-2026.mjs",
+    "verify:scoring": "node scripts/verify-group-scoring-engine.mjs",
+    "verify:history": "node scripts/verify-team-history-import.mjs",
+    "import:squads": "node scripts/import-world-cup-2026-squads.mjs",
+    "import:history": "node scripts/import-team-recent-history.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.107.0",
+    "lucide-react": "^1.17.0",
+    "next": "16.2.7",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.7",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
