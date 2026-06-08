@@ -18,7 +18,7 @@ export default async function GroupsPage() {
   return (
     <AppShell>
       <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[220px_1fr] lg:px-8">
-        <aside className="lg:sticky lg:top-24 lg:self-start">
+        <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
           <nav className="rounded-[24px] border border-[#10131a]/10 bg-[#f8faf4]/90 p-3 shadow-sm">
             {[
               ["Tables", "#tables"],
@@ -39,7 +39,7 @@ export default async function GroupsPage() {
           </nav>
         </aside>
 
-        <div>
+        <div className="min-w-0">
           <section id="tables">
             <PageIntro
               kicker="Groups and knockout path"

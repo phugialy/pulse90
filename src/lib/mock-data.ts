@@ -7,7 +7,13 @@ export type Match = {
   date?: string;
   time: string;
   home: string;
+  homeFlagAssetUrl?: string | null;
+  homeFlagEmoji?: string;
+  homeSlug?: string | null;
   away: string;
+  awayFlagAssetUrl?: string | null;
+  awayFlagEmoji?: string;
+  awaySlug?: string | null;
   score?: string;
   place: string;
   venue: string;

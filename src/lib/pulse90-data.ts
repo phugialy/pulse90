@@ -27,7 +27,9 @@ type FixtureCardRow = {
   stakes: string | null;
   implication: string | null;
   home_team: string | null;
+  home_team_slug: string | null;
   away_team: string | null;
+  away_team_slug: string | null;
   venue: string | null;
   host_city: string | null;
 };
@@ -121,6 +123,28 @@ export type RecentTeamMatch = {
   result: "D" | "L" | "W";
 };
 
+export type MatchCenterGroupRow = {
+  fifaCode: string;
+  flagAssetUrl: string | null;
+  flagEmoji: string;
+  goalDifference: number;
+  name: string;
+  played: number;
+  points: number;
+  rank: number;
+  slug: string;
+};
+
+export type MatchCenterTeam = {
+  flagAssetUrl: string | null;
+  flagEmoji: string;
+  group: string;
+  history: RecentTeamMatch[];
+  name: string;
+  slug: string;
+  squad: SquadPlayer[];
+};
+
 export type DirectoryTeam = {
   confederation: string;
   flagAssetUrl: string | null;
@@ -145,6 +169,28 @@ type TeamRow = {
   group_code: string | null;
   confederation: string;
   status: string;
+};
+
+type FixtureTeamFlagRow = {
+  slug: string;
+  fifa_code: string;
+  flag_asset_url?: string | null;
+  flag_emoji?: string | null;
+};
+
+type FixtureTeamFlag = {
+  assetUrl: string | null;
+  emoji: string;
+};
+
+type MatchCenterTeamRow = {
+  id: string;
+  slug: string;
+  name: string;
+  fifa_code: string;
+  flag_asset_url?: string | null;
+  flag_emoji?: string | null;
+  group_code: string | null;
 };
 
 type StandingRow = {
@@ -323,11 +369,16 @@ function formatMatchDate(startsAt: string) {
   }).format(new Date(startsAt));
 }
 
-function mapFixture(row: FixtureCardRow): Match {
+function mapFixture(
+  row: FixtureCardRow,
+  teamFlags: Map<string, FixtureTeamFlag> = new Map(),
+): Match {
   const home = row.home_team ?? "TBD";
   const away = row.away_team ?? "TBD";
   const status =
     row.status === "live" || row.status === "completed" ? row.status : "scheduled";
+  const homeFlag = row.home_team_slug ? teamFlags.get(row.home_team_slug) : undefined;
+  const awayFlag = row.away_team_slug ? teamFlags.get(row.away_team_slug) : undefined;
 
   return {
     matchNumber: row.match_number,
@@ -336,7 +387,13 @@ function mapFixture(row: FixtureCardRow): Match {
     date: formatMatchDate(row.starts_at),
     time: row.status === "live" ? "Live" : formatKickoff(row.starts_at),
     home,
+    homeFlagAssetUrl: homeFlag?.assetUrl ?? null,
+    homeFlagEmoji: homeFlag?.emoji,
+    homeSlug: row.home_team_slug,
     away,
+    awayFlagAssetUrl: awayFlag?.assetUrl ?? null,
+    awayFlagEmoji: awayFlag?.emoji,
+    awaySlug: row.away_team_slug,
     score:
       row.home_score === null || row.away_score === null
         ? undefined
@@ -351,6 +408,32 @@ function mapFixture(row: FixtureCardRow): Match {
     implication: row.implication ?? "Result implications will update soon.",
     heat: row.importance_score ?? 50,
   };
+}
+
+async function getFixtureTeamFlags() {
+  const supabase = getSupabaseReadClient();
+
+  if (!supabase) {
+    return new Map<string, FixtureTeamFlag>();
+  }
+
+  const result = await supabase
+    .from("teams")
+    .select("slug, fifa_code, flag_emoji, flag_asset_url");
+
+  if (result.error) {
+    return new Map<string, FixtureTeamFlag>();
+  }
+
+  return new Map(
+    (result.data as FixtureTeamFlagRow[]).map((team) => [
+      team.slug,
+      {
+        assetUrl: flagAssetFor(team.fifa_code, team.flag_asset_url),
+        emoji: flagFor(team.fifa_code, team.flag_emoji),
+      },
+    ]),
+  );
 }
 
 function mapUpdate(row: UpdateRow) {
@@ -468,7 +551,7 @@ export async function getTodayDashboard() {
     return fallbackToday();
   }
 
-  const [fixturesResult, updatesResult, predictionsResult] = await Promise.all([
+  const [fixturesResult, updatesResult, predictionsResult, teamFlags] = await Promise.all([
     supabase
       .from("fixture_cards_view")
       .select("*")
@@ -485,13 +568,16 @@ export async function getTodayDashboard() {
       .select("*")
       .order("created_at", { ascending: false })
       .limit(8),
+    getFixtureTeamFlags(),
   ]);
 
   if (fixturesResult.error || updatesResult.error || predictionsResult.error) {
     return fallbackToday();
   }
 
-  const mappedMatches = (fixturesResult.data as FixtureCardRow[]).map(mapFixture);
+  const mappedMatches = (fixturesResult.data as FixtureCardRow[]).map((row) =>
+    mapFixture(row, teamFlags),
+  );
   const mappedLive = mappedMatches.filter((match) => match.status === "live");
 
   return {
@@ -511,17 +597,22 @@ export async function getFixtureExplorer() {
     return { matches: todayMatches };
   }
 
-  const result = await supabase
-    .from("fixture_cards_view")
-    .select("*")
-    .order("starts_at", { ascending: true })
-    .limit(104);
+  const [result, teamFlags] = await Promise.all([
+    supabase
+      .from("fixture_cards_view")
+      .select("*")
+      .order("starts_at", { ascending: true })
+      .limit(104),
+    getFixtureTeamFlags(),
+  ]);
 
   if (result.error) {
     return { matches: todayMatches };
   }
 
-  return { matches: (result.data as FixtureCardRow[]).map(mapFixture) };
+  return {
+    matches: (result.data as FixtureCardRow[]).map((row) => mapFixture(row, teamFlags)),
+  };
 }
 
 export async function getTomorrowPlan() {
@@ -616,7 +707,7 @@ export async function getTeamPath(slug: string) {
     .order("match_date", { ascending: false })
     .limit(12);
   const matches = (fixturesResult.data as FixtureCardRow[])
-    .map(mapFixture)
+    .map((row) => mapFixture(row))
     .filter((match) => match.home === team.name || match.away === team.name);
   const history = historyResult.error
     ? []
@@ -631,7 +722,12 @@ export async function getMatchCenter(matchNumber: string) {
   const supabase = getSupabaseReadClient();
 
   if (!supabase) {
-    return { match: getMatch(matchNumber) };
+    return {
+      awayTeam: null,
+      groupTable: [] as MatchCenterGroupRow[],
+      homeTeam: null,
+      match: getMatch(matchNumber),
+    };
   }
 
   const result = await supabase
@@ -641,10 +737,106 @@ export async function getMatchCenter(matchNumber: string) {
     .single();
 
   if (result.error || !result.data) {
-    return { match: getMatch(matchNumber) };
+    return {
+      awayTeam: null,
+      groupTable: [] as MatchCenterGroupRow[],
+      homeTeam: null,
+      match: getMatch(matchNumber),
+    };
   }
 
-  return { match: mapFixture(result.data as FixtureCardRow) };
+  const fixture = result.data as FixtureCardRow;
+  const teamSlugs = [fixture.home_team_slug, fixture.away_team_slug].filter(
+    (slug): slug is string => Boolean(slug),
+  );
+  const [teamsResult, groupResult] = await Promise.all([
+    supabase
+      .from("teams")
+      .select("id, slug, name, fifa_code, flag_emoji, flag_asset_url, group_code")
+      .in("slug", teamSlugs),
+    fixture.group_code
+      ? supabase
+          .from("live_group_projection_view")
+          .select(
+            "slug, name, fifa_code, flag_emoji, flag_asset_url, group_code, played, goal_difference, points, projected_rank",
+          )
+          .eq("group_code", fixture.group_code)
+          .order("projected_rank", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  const teamRows = teamsResult.error ? [] : (teamsResult.data as MatchCenterTeamRow[]);
+  const teamFlags = new Map(
+    teamRows.map((team) => [
+      team.slug,
+      {
+        assetUrl: flagAssetFor(team.fifa_code, team.flag_asset_url),
+        emoji: flagFor(team.fifa_code, team.flag_emoji),
+      },
+    ]),
+  );
+  const homeTeamRow = teamRows.find((team) => team.slug === fixture.home_team_slug);
+  const awayTeamRow = teamRows.find((team) => team.slug === fixture.away_team_slug);
+  const [homeTeam, awayTeam] = await Promise.all([
+    homeTeamRow ? getMatchCenterTeam(supabase, homeTeamRow) : Promise.resolve(null),
+    awayTeamRow ? getMatchCenterTeam(supabase, awayTeamRow) : Promise.resolve(null),
+  ]);
+  const groupTable = groupResult.error
+    ? []
+    : (groupResult.data as LiveGroupProjectionRow[]).map((standing) => ({
+        fifaCode: standing.fifa_code,
+        flagAssetUrl: flagAssetFor(standing.fifa_code, standing.flag_asset_url),
+        flagEmoji: flagFor(standing.fifa_code, standing.flag_emoji),
+        goalDifference: standing.goal_difference,
+        name: standing.name,
+        played: standing.played,
+        points: standing.points,
+        rank: standing.projected_rank,
+        slug: standing.slug,
+      }));
+
+  return {
+    awayTeam,
+    groupTable,
+    homeTeam,
+    match: mapFixture(fixture, teamFlags),
+  };
+}
+
+async function getMatchCenterTeam(
+  supabase: NonNullable<ReturnType<typeof getSupabaseReadClient>>,
+  team: MatchCenterTeamRow,
+): Promise<MatchCenterTeam> {
+  const [playersResult, historyResult] = await Promise.all([
+    supabase
+      .from("players")
+      .select("name, known_as, position, roster_role, shirt_number, club, status, teams!inner(slug)")
+      .eq("teams.slug", team.slug)
+      .order("shirt_number", { ascending: true }),
+    supabase
+      .from("team_history_matches")
+      .select(
+        "match_date, competition, city, country, home_team_name, away_team_name, home_score, away_score, team_history_goals(team_name, scorer, minute, own_goal, penalty)",
+      )
+      .or(`home_team_id.eq.${team.id},away_team_id.eq.${team.id}`)
+      .order("match_date", { ascending: false })
+      .limit(4),
+  ]);
+
+  return {
+    flagAssetUrl: flagAssetFor(team.fifa_code, team.flag_asset_url),
+    flagEmoji: flagFor(team.fifa_code, team.flag_emoji),
+    group: team.group_code ? `Group ${team.group_code}` : "Group TBD",
+    history: historyResult.error
+      ? []
+      : (historyResult.data as unknown as HistoryMatchRow[]).map((row) =>
+          mapHistoryMatch(row, team.name),
+        ),
+    name: team.name,
+    slug: team.slug,
+    squad: playersResult.error
+      ? []
+      : (playersResult.data as unknown as PlayerRow[]).map(mapPlayer),
+  };
 }
 
 export async function getUpdatesFeed() {

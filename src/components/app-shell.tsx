@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Search } from "lucide-react";
+import { MobileNav } from "@/components/mobile-nav";
 import { NavLinks } from "@/components/nav-links";
 
 export function PulseLogo() {
@@ -22,9 +23,9 @@ export function PulseLogo() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#d7ebff_0,#edf4f8_320px,#e7f3ef_880px)] text-[#10131a]">
+    <main className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,#d7ebff_0,#edf4f8_320px,#e7f3ef_880px)] text-[#10131a]">
       <header className="sticky top-0 z-20 border-b border-[#10131a]/10 bg-[#f8fbf9]/86 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:px-8">
           <PulseLogo />
           <NavLinks />
           <button
@@ -35,6 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
       </header>
+      <MobileNav />
       {children}
     </main>
   );
