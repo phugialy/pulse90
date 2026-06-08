@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Search } from "lucide-react";
+import { DonateMenu } from "@/components/donate-menu";
 import { MobileNav } from "@/components/mobile-nav";
 import { NavLinks } from "@/components/nav-links";
 
@@ -27,7 +28,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-20 border-b border-[#10131a]/10 bg-[#f8fbf9]/86 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:px-8">
           <PulseLogo />
-          <NavLinks />
+          <div className="hidden items-center gap-3 md:flex">
+            <NavLinks />
+            <DonateMenu />
+          </div>
           <button
             aria-label="Search teams and matches"
             className="grid size-10 place-items-center rounded-full border border-[#10131a]/10 bg-white text-[#10131a]/70 shadow-sm transition hover:border-cobalt/40 hover:text-[#10131a]"

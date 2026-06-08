@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CalendarDays, Home, Menu, Shield, Sparkles, Users, X } from "lucide-react";
+import { DonateMenu } from "@/components/donate-menu";
 import { navItems } from "@/components/nav-links";
 
 const navIcons = {
@@ -77,6 +78,13 @@ export function MobileNav() {
               </Link>
             );
           })}
+        </div>
+
+        <div className="mt-5 rounded-[22px] border border-[#10131a]/10 bg-white p-3 shadow-sm">
+          <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[#10131a]/48">
+            Support
+          </p>
+          <DonateMenu placement="mobile" />
         </div>
       </nav>
     </>
