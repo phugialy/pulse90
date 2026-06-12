@@ -145,6 +145,23 @@ export type MatchCenterTeam = {
   squad: SquadPlayer[];
 };
 
+export type ActiveGroupTeam = {
+  slug: string;
+  name: string;
+  fifaCode: string;
+  flagEmoji: string;
+  flagAssetUrl: string | null;
+  played: number;
+  goalDifference: number;
+  points: number;
+  rank: number;
+};
+
+export type ActiveGroup = {
+  groupCode: string;
+  teams: ActiveGroupTeam[];
+};
+
 export type DirectoryTeam = {
   confederation: string;
   flagAssetUrl: string | null;
@@ -533,6 +550,27 @@ function mapHistoryMatch(row: HistoryMatchRow, teamName: string): RecentTeamMatc
   };
 }
 
+function buildActiveGroups(rows: LiveGroupProjectionRow[]): ActiveGroup[] {
+  const groupMap = new Map<string, ActiveGroup>();
+  for (const row of rows) {
+    if (!groupMap.has(row.group_code)) {
+      groupMap.set(row.group_code, { groupCode: row.group_code, teams: [] });
+    }
+    groupMap.get(row.group_code)!.teams.push({
+      slug: row.slug,
+      name: row.name,
+      fifaCode: row.fifa_code,
+      flagEmoji: flagFor(row.fifa_code, row.flag_emoji),
+      flagAssetUrl: flagAssetFor(row.fifa_code, row.flag_asset_url),
+      played: row.played,
+      goalDifference: row.goal_difference,
+      points: row.points,
+      rank: row.projected_rank,
+    });
+  }
+  return Array.from(groupMap.values());
+}
+
 function fallbackToday() {
   return {
     source: "mock" as const,
@@ -541,6 +579,8 @@ function fallbackToday() {
     tomorrowMatches,
     updates,
     predictions,
+    results: [] as Match[],
+    activeGroups: [] as ActiveGroup[],
   };
 }
 
@@ -551,37 +591,65 @@ export async function getTodayDashboard() {
     return fallbackToday();
   }
 
-  const [fixturesResult, predictionsResult, teamFlags] = await Promise.all([
-    supabase
-      .from("fixture_cards_view")
-      .select("*")
-      .in("status", ["scheduled", "live"])
-      .order("starts_at", { ascending: true })
-      .limit(12),
-    supabase
-      .from("predictions")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(8),
-    getFixtureTeamFlags(),
-  ]);
+  const [fixturesResult, predictionsResult, teamFlags, groupProjectionResult] =
+    await Promise.all([
+      supabase
+        .from("fixture_cards_view")
+        .select("*")
+        .in("status", ["scheduled", "live", "completed"])
+        .order("starts_at", { ascending: true })
+        .limit(20),
+      supabase
+        .from("predictions")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(8),
+      getFixtureTeamFlags(),
+      // Only groups that have played at least one match
+      supabase
+        .from("live_group_projection_view")
+        .select("*")
+        .gt("played", 0)
+        .order("group_code", { ascending: true })
+        .order("projected_rank", { ascending: true }),
+    ]);
 
   if (fixturesResult.error || predictionsResult.error) {
     return fallbackToday();
   }
 
-  const mappedMatches = (fixturesResult.data as FixtureCardRow[]).map((row) =>
-    mapFixture(row, teamFlags),
+  const rawRows = fixturesResult.data as FixtureCardRow[];
+  const allMapped = rawRows.map((row) => mapFixture(row, teamFlags));
+
+  const results = allMapped.filter((m) => m.status === "completed");
+  const mappedLive = allMapped.filter((m) => m.status === "live");
+  const upcoming = allMapped.filter((m) => m.status !== "completed");
+
+  // Tomorrow's watch windows: first 4 scheduled fixtures that start after today (UTC)
+  const endOfTodayUtc = new Date();
+  endOfTodayUtc.setUTCHours(23, 59, 59, 999);
+  const notTodayRows = rawRows.filter(
+    (row) =>
+      row.status === "scheduled" &&
+      new Date(row.starts_at) > endOfTodayUtc,
   );
-  const mappedLive = mappedMatches.filter((match) => match.status === "live");
+  const tomorrowItems = notTodayRows
+    .slice(0, 4)
+    .map((row, i) => mapTomorrowItem(mapFixture(row, teamFlags), i));
+
+  const activeGroups = buildActiveGroups(
+    (groupProjectionResult.data ?? []) as LiveGroupProjectionRow[],
+  );
 
   return {
     source: "supabase" as const,
     liveMatches: mappedLive,
-    todayMatches: mappedMatches.length ? mappedMatches : todayMatches,
-    tomorrowMatches: mappedMatches.slice(0, 3).map(mapTomorrowItem),
+    todayMatches: upcoming.length ? upcoming : todayMatches,
+    tomorrowMatches: tomorrowItems.length ? tomorrowItems : tomorrowMatches,
     updates: [],
     predictions: (predictionsResult.data as PredictionRow[]).map(mapPrediction),
+    results,
+    activeGroups,
   };
 }
 

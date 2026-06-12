@@ -3,10 +3,12 @@ export const dynamic = "force-dynamic";
 import { AppShell } from "@/components/app-shell";
 import { InstallAppCta } from "@/components/install-app-cta";
 import {
+  GroupSnapshot,
   LiveStack,
   PageIntro,
   PredictionStrip,
   PriorityMatch,
+  ResultsRibbon,
   WatchFlow,
 } from "@/components/ui";
 import { getTodayDashboard } from "@/lib/pulse90-data";
@@ -34,6 +36,7 @@ export default async function Home() {
             </div>
           </div>
 
+          <ResultsRibbon matches={dashboard.results} />
           <PriorityMatch match={priorityMatch} />
           <WatchFlow
             matches={dashboard.todayMatches}
@@ -43,8 +46,11 @@ export default async function Home() {
 
         <aside className="min-w-0 space-y-5">
           <LiveStack matches={dashboard.liveMatches} />
+          <GroupSnapshot groups={dashboard.activeGroups} />
           <InstallAppCta />
-          <PredictionStrip items={dashboard.predictions.slice(0, 3)} />
+          {dashboard.predictions.length > 0 && (
+            <PredictionStrip items={dashboard.predictions.slice(0, 3)} />
+          )}
         </aside>
       </div>
     </AppShell>

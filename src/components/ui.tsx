@@ -26,6 +26,30 @@ import {
   type Prediction,
   type Team,
 } from "@/lib/mock-data";
+import type { ActiveGroup } from "@/lib/pulse90-data";
+
+function FlagImg({
+  src,
+  emoji,
+  alt,
+}: {
+  src: string | null | undefined;
+  emoji: string | undefined;
+  alt: string;
+}) {
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        alt={alt}
+        className="h-4 w-6 shrink-0 rounded-[3px] object-cover shadow-sm ring-1 ring-[#10131a]/10"
+        loading="lazy"
+        src={src}
+      />
+    );
+  }
+  return <span className="text-base leading-none">{emoji ?? "🏳"}</span>;
+}
 
 export function StatusPill({
   icon: Icon,
@@ -522,6 +546,135 @@ export function ShareCardSeed() {
         Generate card
         <ArrowUpRight className="size-4" />
       </button>
+    </section>
+  );
+}
+
+export function ResultsRibbon({ matches }: { matches: Match[] }) {
+  if (!matches.length) return null;
+
+  return (
+    <section className="rounded-[24px] border border-[#10131a]/10 bg-white shadow-sm p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <BadgeCheck className="size-4 text-cobalt" />
+          <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[#10131a]/70">
+            Today&apos;s results
+          </h2>
+        </div>
+        <span className="text-xs font-bold text-[#10131a]/45">
+          {matches.length} finished
+        </span>
+      </div>
+
+      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:-mx-5 sm:px-5">
+        {matches.map((match) => (
+          <Link
+            key={match.matchNumber}
+            href={`/matches/${match.matchNumber}`}
+            className="flex shrink-0 items-center gap-3 rounded-2xl border border-[#10131a]/10 bg-stadium px-4 py-3 transition hover:border-cobalt/40"
+          >
+            <span className="flex items-center gap-2 text-sm font-black text-[#10131a]">
+              <FlagImg
+                src={match.homeFlagAssetUrl}
+                emoji={match.homeFlagEmoji}
+                alt={match.home}
+              />
+              {match.home}
+            </span>
+            <span className="px-1 text-xl font-black tabular-nums text-cobalt">
+              {match.score}
+            </span>
+            <span className="flex items-center gap-2 text-sm font-black text-[#10131a]">
+              {match.away}
+              <FlagImg
+                src={match.awayFlagAssetUrl}
+                emoji={match.awayFlagEmoji}
+                alt={match.away}
+              />
+            </span>
+            <span className="ml-1 rounded-full bg-[#10131a]/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-[#10131a]/55">
+              {match.group} · FT
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function GroupSnapshot({ groups }: { groups: ActiveGroup[] }) {
+  if (!groups.length) return null;
+
+  return (
+    <section className="rounded-[24px] border border-[#10131a]/10 bg-white/88 shadow-sm p-4">
+      <div className="mb-4 flex items-center gap-2">
+        <Trophy className="size-4 text-cobalt" />
+        <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[#10131a]/70">
+          Live tables
+        </h2>
+      </div>
+
+      <div className="space-y-5">
+        {groups.map((group) => (
+          <div key={group.groupCode}>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#10131a]/50">
+                Group {group.groupCode}
+              </p>
+              <Link
+                href="/groups"
+                className="text-[10px] font-black text-cobalt hover:underline"
+              >
+                Full table →
+              </Link>
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-[#10131a]/10">
+              <div className="grid grid-cols-[1fr_28px_32px_32px] bg-[#10131a]/5 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#10131a]/45">
+                <span>Team</span>
+                <span className="text-right">P</span>
+                <span className="text-right">GD</span>
+                <span className="text-right">Pts</span>
+              </div>
+              {group.teams.map((team, i) => (
+                <Link
+                  key={team.slug}
+                  href={`/teams/${team.slug}`}
+                  className={`grid grid-cols-[1fr_28px_32px_32px] items-center px-3 py-2 text-xs transition hover:bg-stadium ${
+                    i > 0 ? "border-t border-[#10131a]/8" : ""
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <FlagImg
+                      src={team.flagAssetUrl}
+                      emoji={team.flagEmoji}
+                      alt={team.name}
+                    />
+                    <span className="truncate font-bold text-[#10131a]">
+                      {team.fifaCode}
+                    </span>
+                    {team.rank <= 2 && (
+                      <span className="text-[9px] font-black text-lime-600">▲</span>
+                    )}
+                  </span>
+                  <span className="text-right font-bold text-[#10131a]/60">
+                    {team.played}
+                  </span>
+                  <span className="text-right font-bold text-[#10131a]/60">
+                    {team.goalDifference > 0
+                      ? `+${team.goalDifference}`
+                      : team.goalDifference}
+                  </span>
+                  <span className="text-right font-black text-cobalt">
+                    {team.points}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
