@@ -228,7 +228,7 @@ async function processFixture(
     .eq("source", "model");
 
   if (winnerTeam && winnerProb > 0.52) {
-    await supabase.from("predictions").insert({
+    const { error: winnerErr } = await supabase.from("predictions").insert({
       tournament_id: tournamentId,
       fixture_id: fixture.id,
       prediction_type: "match_winner",
@@ -239,6 +239,8 @@ async function processFixture(
       model_version: "v1-ranking",
       valid_until: fixture.starts_at,
     });
+    if (winnerErr) console.error("match_winner insert failed", fixture.match_number, winnerErr.message);
+    else console.log("match_winner inserted", fixture.match_number, winnerTeam.name, winnerProb.toFixed(2));
   }
 
   // ------------------------------------------------------------------
