@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
   // Find scheduled fixtures in the next 24 hours
   // ------------------------------------------------------------------
   const now = new Date();
-  const cutoff = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const cutoff = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
   const { data: fixtures } = await supabase
     .from("fixtures")
@@ -113,7 +113,8 @@ export async function GET(request: NextRequest) {
     .eq("status", "scheduled")
     .eq("tournament_id", tournament.id)
     .gte("starts_at", now.toISOString())
-    .lte("starts_at", cutoff.toISOString());
+    .lte("starts_at", cutoff.toISOString())
+    .limit(20);
 
   if (!fixtures || fixtures.length === 0) {
     return NextResponse.json({
