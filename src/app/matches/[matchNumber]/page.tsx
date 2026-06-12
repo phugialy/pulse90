@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { MatchTeamTabs } from "@/components/match-team-tabs";
 import { WhoWinsVote } from "@/components/who-wins-vote";
 import { PageIntro, StatusPill } from "@/components/ui";
+import { Sparkles } from "lucide-react";
 import {
   getMatchCenter,
   type MatchCenterGroupRow,
@@ -73,6 +74,12 @@ export default async function MatchPage({
               <StatusPill icon={Trophy}>{formatStage(match.stage)}</StatusPill>
               <StatusPill icon={MapPin}>{match.venue}</StatusPill>
               <StatusPill icon={MapPin}>{match.place}</StatusPill>
+              {predictions.matchWinner && match.status === "scheduled" && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-cobalt/20 bg-cobalt/8 px-3 py-1 text-xs font-black text-cobalt">
+                  <Sparkles className="size-3" />
+                  Our call: {predictions.matchWinner}
+                </span>
+              )}
             </div>
 
             <div className="mt-6 rounded-2xl bg-white/82 p-4 shadow-sm backdrop-blur">
@@ -121,7 +128,7 @@ export default async function MatchPage({
             </p>
           </section>
           {(predictions.goalScorers.length > 0 || predictions.cardWatch.length > 0) && (
-            <MatchPredictionsPanel predictions={predictions} />
+            <MatchPredictionsPanel events={events} predictions={predictions} status={match.status} />
           )}
         </aside>
       </div>
@@ -246,7 +253,40 @@ function formatStage(stage: string) {
   return stage === "group" ? "Group stage" : stage;
 }
 
-function MatchPredictionsPanel({ predictions }: { predictions: MatchPredictions }) {
+function MatchPredictionsPanel({
+  events,
+  predictions,
+  status,
+}: {
+  events: MatchEvent[];
+  predictions: MatchPredictions;
+  status: string;
+}) {
+  // Names of players who actually scored (lowercased for fuzzy match)
+  const actualScorers = new Set(
+    events
+      .filter((e) => e.eventType === "goal" || e.eventType === "penalty_goal")
+      .map((e) => e.title.toLowerCase()),
+  );
+  const actualCarded = new Set(
+    events
+      .filter((e) => e.eventType === "yellow_card" || e.eventType === "red_card")
+      .map((e) => e.title.toLowerCase()),
+  );
+
+  const isLiveOrDone = status === "live" || status === "completed";
+
+  function hitGoal(name: string) {
+    if (!isLiveOrDone) return false;
+    const n = name.toLowerCase();
+    return actualScorers.has(n) || [...actualScorers].some((s) => s.includes(n) || n.includes(s));
+  }
+  function hitCard(name: string) {
+    if (!isLiveOrDone) return false;
+    const n = name.toLowerCase();
+    return actualCarded.has(n) || [...actualCarded].some((s) => s.includes(n) || n.includes(s));
+  }
+
   return (
     <section className="rounded-[24px] border border-[#10131a]/10 bg-white p-5 shadow-sm">
       <p className="text-xs font-black uppercase tracking-[0.2em] text-[#10131a]/60">
@@ -258,13 +298,24 @@ function MatchPredictionsPanel({ predictions }: { predictions: MatchPredictions 
             <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-cobalt">
               Likely to score
             </p>
-            <ol className="space-y-1">
-              {predictions.goalScorers.map((p, i) => (
-                <li key={i} className="flex items-center gap-2 text-xs font-bold text-[#10131a]">
-                  <span className="w-3 shrink-0 text-[#10131a]/35">{i + 1}.</span>
-                  {p.label}
-                </li>
-              ))}
+            <ol className="space-y-1.5">
+              {predictions.goalScorers.map((p, i) => {
+                const correct = hitGoal(p.label);
+                return (
+                  <li
+                    key={i}
+                    className={`flex items-center gap-2 rounded-lg px-2 py-1 text-xs font-bold transition ${
+                      correct
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "text-[#10131a]"
+                    }`}
+                  >
+                    <span className="w-3 shrink-0 text-[#10131a]/35">{i + 1}.</span>
+                    <span className="flex-1">{p.label}</span>
+                    {correct && <span className="text-emerald-500">✓</span>}
+                  </li>
+                );
+              })}
             </ol>
           </div>
         )}
@@ -273,13 +324,24 @@ function MatchPredictionsPanel({ predictions }: { predictions: MatchPredictions 
             <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-600">
               Card watch
             </p>
-            <ol className="space-y-1">
-              {predictions.cardWatch.map((p, i) => (
-                <li key={i} className="flex items-center gap-2 text-xs font-bold text-[#10131a]">
-                  <span className="w-3 shrink-0 text-[#10131a]/35">{i + 1}.</span>
-                  {p.label}
-                </li>
-              ))}
+            <ol className="space-y-1.5">
+              {predictions.cardWatch.map((p, i) => {
+                const correct = hitCard(p.label);
+                return (
+                  <li
+                    key={i}
+                    className={`flex items-center gap-2 rounded-lg px-2 py-1 text-xs font-bold transition ${
+                      correct
+                        ? "bg-amber-50 text-amber-700"
+                        : "text-[#10131a]"
+                    }`}
+                  >
+                    <span className="w-3 shrink-0 text-[#10131a]/35">{i + 1}.</span>
+                    <span className="flex-1">{p.label}</span>
+                    {correct && <span className="text-amber-500">✓</span>}
+                  </li>
+                );
+              })}
             </ol>
           </div>
         )}

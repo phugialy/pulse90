@@ -39,7 +39,7 @@ export default async function Home() {
           </div>
 
           <ResultsRibbon matches={dashboard.results} />
-          <PriorityMatch match={priorityMatch} />
+          <PriorityMatch match={priorityMatch} matchWinner={dashboard.priorityMatchWinner} />
 
           {priorityMatch?.fixtureId &&
             priorityMatch.homeTeamId &&

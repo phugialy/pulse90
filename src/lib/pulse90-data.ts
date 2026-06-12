@@ -224,8 +224,31 @@ export type PlayerPrediction = {
 };
 
 export type MatchPredictions = {
+  matchWinner: string | null;
   goalScorers: PlayerPrediction[];
   cardWatch: PlayerPrediction[];
+};
+
+export type GoldenBootEntry = {
+  name: string;
+  goals: number;
+};
+
+export type UpcomingMatchPrediction = {
+  fixtureId: string;
+  matchNumber: number;
+  startsAt: string;
+  date: string;
+  time: string;
+  home: string;
+  homeFlagEmoji: string;
+  homeFlagAssetUrl: string | null;
+  away: string;
+  awayFlagEmoji: string;
+  awayFlagAssetUrl: string | null;
+  matchWinner: string | null;
+  goalScorers: string[];
+  cardWatch: string[];
 };
 
 type MatchCenterTeamRow = {
@@ -636,6 +659,7 @@ function fallbackToday() {
     activeGroups: [] as ActiveGroup[],
     nextMatch: null,
     priorityMatchTally: emptyTally,
+    priorityMatchWinner: null as string | null,
   };
 }
 
@@ -646,7 +670,7 @@ export async function getTodayDashboard() {
     return fallbackToday();
   }
 
-  const [fixturesResult, predictionsResult, teamFlags, groupProjectionResult] =
+  const [fixturesResult, predictionsResult, teamFlags, groupProjectionResult, matchWinnerResult] =
     await Promise.all([
       supabase
         .from("fixture_cards_view")
@@ -667,6 +691,10 @@ export async function getTodayDashboard() {
         .gt("played", 0)
         .order("group_code", { ascending: true })
         .order("projected_rank", { ascending: true }),
+      supabase
+        .from("predictions")
+        .select("fixture_id, label")
+        .eq("prediction_type", "match_winner"),
     ]);
 
   if (fixturesResult.error || predictionsResult.error) {
@@ -724,6 +752,11 @@ export async function getTodayDashboard() {
         )
       : emptyTally;
 
+  type MatchWinnerRow = { fixture_id: string; label: string };
+  const matchWinnerRows = (matchWinnerResult.data ?? []) as MatchWinnerRow[];
+  const priorityMatchWinner =
+    matchWinnerRows.find((r) => r.fixture_id === priorityMatch?.fixtureId)?.label ?? null;
+
   return {
     source: "supabase" as const,
     liveMatches: mappedLive,
@@ -735,6 +768,7 @@ export async function getTodayDashboard() {
     activeGroups,
     nextMatch,
     priorityMatchTally,
+    priorityMatchWinner,
   };
 }
 
@@ -870,7 +904,7 @@ export async function getMatchCenter(matchNumber: string) {
   const supabase = getSupabaseReadClient();
 
   const emptyTally: VoteTally = { homeVotes: 0, drawVotes: 0, awayVotes: 0, total: 0 };
-  const emptyPredictions: MatchPredictions = { goalScorers: [], cardWatch: [] };
+  const emptyPredictions: MatchPredictions = { matchWinner: null, goalScorers: [], cardWatch: [] };
   const emptyCenter = {
     awayTeam: null,
     awayTeamId: null,
@@ -925,7 +959,7 @@ export async function getMatchCenter(matchNumber: string) {
       .from("predictions")
       .select("prediction_type, label, probability")
       .eq("fixture_id", fixture.id)
-      .in("prediction_type", ["player_goal", "player_card"])
+      .in("prediction_type", ["player_goal", "player_card", "match_winner"])
       .order("probability", { ascending: false }),
   ]);
   const teamRows = teamsResult.error ? [] : (teamsResult.data as MatchCenterTeamRow[]);
@@ -982,6 +1016,7 @@ export async function getMatchCenter(matchNumber: string) {
   type PredictionPlayerRow = { prediction_type: string; label: string; probability: number };
   const predRows = (predictionsResult.data ?? []) as PredictionPlayerRow[];
   const matchPredictions: MatchPredictions = {
+    matchWinner: predRows.find((r) => r.prediction_type === "match_winner")?.label ?? null,
     goalScorers: predRows
       .filter((r) => r.prediction_type === "player_goal")
       .slice(0, 5)
@@ -1081,6 +1116,101 @@ export async function getPredictionHub() {
   }
 
   return { predictions: (result.data as PredictionRow[]).map(mapPrediction) };
+}
+
+export async function getPredictionsHub() {
+  const supabase = getSupabaseReadClient();
+
+  if (!supabase) {
+    return { goldenBoot: [] as GoldenBootEntry[], upcomingMatches: [] as UpcomingMatchPrediction[], tournamentPredictions: [] as ReturnType<typeof mapPrediction>[] };
+  }
+
+  const now = new Date();
+  const weekAhead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const [goldenBootResult, upcomingFixturesResult, teamFlags, editorialResult] = await Promise.all([
+    supabase
+      .from("match_events")
+      .select("title, event_type")
+      .in("event_type", ["goal", "penalty_goal"]),
+    supabase
+      .from("fixture_cards_view")
+      .select("*")
+      .eq("status", "scheduled")
+      .gte("starts_at", now.toISOString())
+      .lte("starts_at", weekAhead.toISOString())
+      .order("starts_at", { ascending: true })
+      .limit(6),
+    getFixtureTeamFlags(),
+    supabase
+      .from("predictions")
+      .select("prediction_type, label, movement_label, movement_value")
+      .is("fixture_id", null)
+      .order("created_at", { ascending: false })
+      .limit(6),
+  ]);
+
+  // Golden boot: aggregate goal events by player name
+  type GoalEventRow = { title: string; event_type: string };
+  const goalCounts: Record<string, number> = {};
+  for (const ev of (goldenBootResult.data ?? []) as GoalEventRow[]) {
+    if (ev.title) goalCounts[ev.title] = (goalCounts[ev.title] ?? 0) + 1;
+  }
+  const goldenBoot: GoldenBootEntry[] = Object.entries(goalCounts)
+    .map(([name, goals]) => ({ name, goals }))
+    .sort((a, b) => b.goals - a.goals)
+    .slice(0, 10);
+
+  // Upcoming match predictions
+  const upcomingFixtureRows = (upcomingFixturesResult.data ?? []) as FixtureCardRow[];
+  const fixtureIds = upcomingFixtureRows.map((r) => r.id);
+
+  type FixturePredRow = { fixture_id: string; prediction_type: string; label: string; probability: number };
+  const upcomingMatches: UpcomingMatchPrediction[] = [];
+
+  if (fixtureIds.length > 0) {
+    const fixturePredsResult = await supabase
+      .from("predictions")
+      .select("fixture_id, prediction_type, label, probability")
+      .in("fixture_id", fixtureIds)
+      .in("prediction_type", ["player_goal", "player_card", "match_winner"])
+      .order("probability", { ascending: false });
+
+    const predsByFixture = new Map<string, FixturePredRow[]>();
+    for (const p of (fixturePredsResult.data ?? []) as FixturePredRow[]) {
+      const arr = predsByFixture.get(p.fixture_id) ?? [];
+      arr.push(p);
+      predsByFixture.set(p.fixture_id, arr);
+    }
+
+    for (const row of upcomingFixtureRows) {
+      const preds = predsByFixture.get(row.id) ?? [];
+      const homeFlag = row.home_team_slug ? teamFlags.get(row.home_team_slug) : undefined;
+      const awayFlag = row.away_team_slug ? teamFlags.get(row.away_team_slug) : undefined;
+      upcomingMatches.push({
+        fixtureId: row.id,
+        matchNumber: row.match_number,
+        startsAt: row.starts_at,
+        date: formatMatchDate(row.starts_at),
+        time: formatKickoff(row.starts_at),
+        home: row.home_team ?? "TBD",
+        homeFlagEmoji: homeFlag?.emoji ?? "🏳",
+        homeFlagAssetUrl: homeFlag?.assetUrl ?? null,
+        away: row.away_team ?? "TBD",
+        awayFlagEmoji: awayFlag?.emoji ?? "🏳",
+        awayFlagAssetUrl: awayFlag?.assetUrl ?? null,
+        matchWinner: preds.find((p) => p.prediction_type === "match_winner")?.label ?? null,
+        goalScorers: preds.filter((p) => p.prediction_type === "player_goal").slice(0, 3).map((p) => p.label),
+        cardWatch: preds.filter((p) => p.prediction_type === "player_card").slice(0, 3).map((p) => p.label),
+      });
+    }
+  }
+
+  const tournamentPredictions = (editorialResult.data ?? []).map((r) =>
+    mapPrediction(r as PredictionRow),
+  );
+
+  return { goldenBoot, upcomingMatches, tournamentPredictions };
 }
 
 export async function getGroupsBoard() {

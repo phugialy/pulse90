@@ -92,7 +92,13 @@ export function PageIntro({
   );
 }
 
-export function PriorityMatch({ match = liveMatches[0] }: { match?: Match }) {
+export function PriorityMatch({
+  match = liveMatches[0],
+  matchWinner = null,
+}: {
+  match?: Match;
+  matchWinner?: string | null;
+}) {
   const isLive = match.status === "live";
   const centerText = match.score ?? "vs";
 
@@ -149,6 +155,14 @@ export function PriorityMatch({ match = liveMatches[0] }: { match?: Match }) {
             <p>{match.venue}</p>
             <p>{match.place}</p>
           </div>
+          {matchWinner && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl bg-cobalt/8 px-3 py-2">
+              <Sparkles className="size-3.5 shrink-0 text-cobalt" />
+              <p className="text-xs font-black text-cobalt">
+                Our call: {matchWinner}
+              </p>
+            </div>
+          )}
           <Link
             className="mt-5 inline-flex h-10 items-center gap-2 rounded-full bg-[#10131a] px-4 text-sm font-black text-white transition hover:bg-cobalt"
             href={`/matches/${match.matchNumber}`}
@@ -491,11 +505,19 @@ export function PredictionStrip({
 }) {
   return (
     <section className="rounded-[24px] border border-[#10131a]/10 bg-white/88 shadow-sm p-4">
-      <div className="mb-4 flex items-center gap-2">
-        <Activity className="size-4 text-cobalt" />
-        <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[#10131a]/70">
-          Prediction pulse
-        </h2>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Activity className="size-4 text-cobalt" />
+          <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[#10131a]/70">
+            Prediction pulse
+          </h2>
+        </div>
+        <Link
+          className="text-xs font-black text-cobalt hover:underline"
+          href="/predictions"
+        >
+          View all →
+        </Link>
       </div>
       <div className="grid gap-3">
         {!items.length ? (

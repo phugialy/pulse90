@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowUpRight, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TeamWatchTabs } from "@/components/team-watch-tabs";
 import { PageIntro } from "@/components/ui";
@@ -11,6 +13,7 @@ export default async function TeamPage({
 }) {
   const { slug } = await params;
   const { team, matches, history } = await getTeamPath(slug);
+  const nextMatch = matches.find((m) => m.status === "scheduled");
 
   if (!team) {
     notFound();
@@ -37,6 +40,32 @@ export default async function TeamPage({
           <TeamWatchTabs history={history} matches={matches} story={team.history} />
         </section>
         <aside className="min-w-0 space-y-5">
+          {nextMatch && (
+            <section className="rounded-[24px] border border-cobalt/20 bg-cobalt/5 p-5">
+              <div className="flex items-center gap-2">
+                <Sparkles className="size-4 text-cobalt" />
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-cobalt">
+                  Match prediction
+                </p>
+              </div>
+              <p className="mt-3 font-black text-[#10131a]">
+                {nextMatch.home} vs {nextMatch.away}
+              </p>
+              <p className="mt-1 text-xs font-bold text-[#10131a]/55">
+                {nextMatch.date} · {nextMatch.time}
+              </p>
+              <p className="mt-3 text-sm leading-5 text-[#10131a]/62">
+                Goal scorers and card watch picks available for this fixture.
+              </p>
+              <Link
+                className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-cobalt px-4 py-2 text-xs font-black text-white transition hover:bg-cobalt/80"
+                href={`/matches/${nextMatch.matchNumber}`}
+              >
+                View predictions
+                <ArrowUpRight className="size-3.5" />
+              </Link>
+            </section>
+          )}
           <section className="rounded-[24px] border border-[#10131a]/10 bg-white shadow-sm p-5">
             <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[#10131a]/70">
               People
