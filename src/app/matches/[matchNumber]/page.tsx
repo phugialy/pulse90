@@ -74,12 +74,6 @@ export default async function MatchPage({
               <StatusPill icon={Trophy}>{formatStage(match.stage)}</StatusPill>
               <StatusPill icon={MapPin}>{match.venue}</StatusPill>
               <StatusPill icon={MapPin}>{match.place}</StatusPill>
-              {predictions.matchWinner && match.status !== "completed" && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-cobalt/20 bg-cobalt/8 px-3 py-1 text-xs font-black text-cobalt">
-                  <Sparkles className="size-3" />
-                  Our call: {predictions.matchWinner}
-                </span>
-              )}
             </div>
 
             <div className="mt-6 rounded-2xl bg-white/82 p-4 shadow-sm backdrop-blur">
@@ -90,6 +84,26 @@ export default async function MatchPage({
                 {match.implication}
               </p>
             </div>
+
+            {(predictions.matchWinner || predictions.goalScorers.length > 0) && match.status !== "completed" && (
+              <div className="mt-4 flex items-start gap-3 rounded-2xl bg-cobalt px-4 py-3">
+                <Sparkles className="mt-0.5 size-4 shrink-0 text-white/70" />
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    {predictions.matchWinner && (
+                      <span className="text-base font-black text-white">
+                        Our call: {predictions.matchWinner}
+                      </span>
+                    )}
+                    {predictions.goalScorers.length > 0 && (
+                      <span className="text-sm font-bold text-white/70">
+                        Top players: {predictions.goalScorers.slice(0, 2).map((p) => p.label).join(" · ")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
 
           {fixtureId && homeTeamId && awayTeamId && (
