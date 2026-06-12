@@ -25,11 +25,6 @@ type TeamRow = {
   name: string;
 };
 
-type StandingRow = {
-  id: string;
-  team_id: string;
-};
-
 type EspnCompetitor = {
   homeAway: "home" | "away";
   score: string;
@@ -50,13 +45,14 @@ type EspnEvent = {
 };
 
 // ---------------------------------------------------------------------------
-// Window constants
+// Constants
 // ---------------------------------------------------------------------------
 
-// A match is considered "in window" if it started within this many minutes ago
-const MATCH_WINDOW_MINUTES = 125;
-// We start watching 5 min before kickoff
+// Pre-match window: start watching this many minutes before kickoff
 const PRE_MATCH_MINUTES = 5;
+
+// Note: standings recalculation is handled automatically by the DB trigger
+// recalculate_group_standings_on_fixture_change — no application-level work needed.
 
 // ---------------------------------------------------------------------------
 // ESPN fetch
@@ -133,104 +129,6 @@ function findEspnEvent(
 }
 
 // ---------------------------------------------------------------------------
-// Standings recalculation (full recompute from all completed fixtures in group)
-// Avoids double-counting if the sync runs more than once per match.
-// ---------------------------------------------------------------------------
-
-async function recalculateGroupStandings(
-  supabase: NonNullable<ReturnType<typeof getSupabaseAdminClient>>,
-  tournamentId: string,
-  groupCode: string,
-) {
-  const [{ data: completedFixtures }, { data: groupStandings }] =
-    await Promise.all([
-      supabase
-        .from("fixtures")
-        .select("home_team_id, away_team_id, home_score, away_score")
-        .eq("tournament_id", tournamentId)
-        .eq("group_code", groupCode)
-        .eq("status", "completed"),
-      supabase
-        .from("standings")
-        .select("id, team_id")
-        .eq("tournament_id", tournamentId)
-        .eq("group_code", groupCode),
-    ]);
-
-  if (!completedFixtures?.length || !groupStandings?.length) return;
-
-  // Compute stats per team
-  const statUpdates = await Promise.all(
-    (groupStandings as StandingRow[]).map(async (row) => {
-      const teamId = row.team_id;
-      let played = 0,
-        won = 0,
-        drawn = 0,
-        lost = 0,
-        goalsFor = 0,
-        goalsAgainst = 0;
-
-      for (const f of completedFixtures) {
-        const isHome = f.home_team_id === teamId;
-        const isAway = f.away_team_id === teamId;
-        if (!isHome && !isAway) continue;
-
-        played++;
-        const tf = isHome ? (f.home_score ?? 0) : (f.away_score ?? 0);
-        const ta = isHome ? (f.away_score ?? 0) : (f.home_score ?? 0);
-        goalsFor += tf;
-        goalsAgainst += ta;
-        if (tf > ta) won++;
-        else if (tf === ta) drawn++;
-        else lost++;
-      }
-
-      return {
-        standingId: row.id,
-        teamId,
-        played,
-        won,
-        drawn,
-        lost,
-        goalsFor,
-        goalsAgainst,
-        goalDifference: goalsFor - goalsAgainst,
-        points: won * 3 + drawn,
-      };
-    }),
-  );
-
-  // Rank by FIFA tiebreaker: points → GD → GF
-  const ranked = [...statUpdates].sort(
-    (a, b) =>
-      b.points - a.points ||
-      b.goalDifference - a.goalDifference ||
-      b.goalsFor - a.goalsFor,
-  );
-
-  await Promise.all(
-    statUpdates.map((stat, _i) => {
-      const rank = ranked.findIndex((r) => r.standingId === stat.standingId) + 1;
-      return supabase
-        .from("standings")
-        .update({
-          played: stat.played,
-          won: stat.won,
-          drawn: stat.drawn,
-          lost: stat.lost,
-          goals_for: stat.goalsFor,
-          goals_against: stat.goalsAgainst,
-          goal_difference: stat.goalDifference,
-          points: stat.points,
-          rank,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", stat.standingId);
-    }),
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Route handler
 // ---------------------------------------------------------------------------
 
@@ -262,22 +160,21 @@ export async function GET(request: NextRequest) {
   }
 
   const now = new Date();
-  const windowStart = new Date(
-    now.getTime() - MATCH_WINDOW_MINUTES * 60 * 1000,
-  );
-  const windowEnd = new Date(now.getTime() + PRE_MATCH_MINUTES * 60 * 1000);
+  const preMatchCutoff = new Date(now.getTime() + PRE_MATCH_MINUTES * 60 * 1000);
 
   // ------------------------------------------------------------------
-  // Find fixtures currently in an active match window
+  // Find fixtures that are live OR scheduled but already started
+  // (covers catch-up: matches that completed while the sync was down)
+  // "scheduled" + starts_at <= now+5min = kickoff imminent or already past
+  // The DB trigger handles standings the moment we write the score.
   // ------------------------------------------------------------------
   const { data: windowFixtures, error: windowError } = await supabase
     .from("fixtures")
     .select(
       "id, tournament_id, match_number, starts_at, status, group_code, minute, home_score, away_score, home_team_id, away_team_id",
     )
-    .or(
-      `status.eq.live,and(starts_at.gte.${windowStart.toISOString()},starts_at.lte.${windowEnd.toISOString()})`,
-    )
+    .in("status", ["live", "scheduled"])
+    .lte("starts_at", preMatchCutoff.toISOString())
     .order("starts_at", { ascending: true });
 
   if (windowError) {
@@ -359,7 +256,10 @@ export async function GET(request: NextRequest) {
   const espnEvents = await fetchEspnScores();
 
   // ------------------------------------------------------------------
-  // Update each fixture in the window
+  // Update each fixture in the window.
+  // Writing home_score/away_score/status fires the DB trigger
+  // recalculate_group_standings_on_fixture_change automatically —
+  // no application-level standings work needed.
   // ------------------------------------------------------------------
   type UpdateRecord = {
     matchNumber: number;
@@ -367,10 +267,8 @@ export async function GET(request: NextRequest) {
     away: number | null;
     status: string;
     minute: number | null;
-    groupCode: string | null;
   };
   const updated: UpdateRecord[] = [];
-  const groupsToRecalc = new Set<string>();
 
   for (const fixture of windowFixtures as FixtureRow[]) {
     const homeTeam = teamMap.get(fixture.home_team_id);
@@ -423,25 +321,7 @@ export async function GET(request: NextRequest) {
       away: awayScoreVal,
       status: newStatus,
       minute: newMinute,
-      groupCode: fixture.group_code,
     });
-
-    // Queue standings recalc when a group match completes
-    if (
-      newStatus === "completed" &&
-      fixture.status !== "completed" &&
-      fixture.group_code
-    ) {
-      groupsToRecalc.add(`${fixture.tournament_id}::${fixture.group_code}`);
-    }
-  }
-
-  // ------------------------------------------------------------------
-  // Recalculate standings for any group that had a match complete
-  // ------------------------------------------------------------------
-  for (const key of groupsToRecalc) {
-    const [tournamentId, groupCode] = key.split("::");
-    await recalculateGroupStandings(supabase, tournamentId, groupCode);
   }
 
   // ------------------------------------------------------------------
@@ -457,7 +337,6 @@ export async function GET(request: NextRequest) {
     records_changed: updated.length,
     metadata: {
       espnEventsFound: espnEvents.length,
-      groupsRecalculated: [...groupsToRecalc],
       fixtures: updated,
     },
   });
@@ -467,7 +346,6 @@ export async function GET(request: NextRequest) {
     timestamp: now.toISOString(),
     activeFixtures: windowFixtures.length,
     updated,
-    groupsRecalculated: [...groupsToRecalc],
     durationMs: Date.now() - startedAt,
   });
 }
