@@ -1,4 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { KnockoutTabs } from "@/components/knockout-tabs";
