@@ -1,7 +1,9 @@
 export const dynamic = "force-dynamic";
 
 import { AppShell } from "@/components/app-shell";
+import { CountdownClock } from "@/components/countdown-clock";
 import { InstallAppCta } from "@/components/install-app-cta";
+import { WhoWinsVote } from "@/components/who-wins-vote";
 import {
   GroupSnapshot,
   LiveStack,
@@ -38,6 +40,23 @@ export default async function Home() {
 
           <ResultsRibbon matches={dashboard.results} />
           <PriorityMatch match={priorityMatch} />
+
+          {priorityMatch?.fixtureId &&
+            priorityMatch.homeTeamId &&
+            priorityMatch.awayTeamId && (
+              <WhoWinsVote
+                awayFlagEmoji={priorityMatch.awayFlagEmoji}
+                awayName={priorityMatch.away}
+                awayTeamId={priorityMatch.awayTeamId}
+                fixtureId={priorityMatch.fixtureId}
+                homeFlagEmoji={priorityMatch.homeFlagEmoji}
+                homeName={priorityMatch.home}
+                homeTeamId={priorityMatch.homeTeamId}
+                initialTally={dashboard.priorityMatchTally}
+                status={priorityMatch.status}
+              />
+            )}
+
           <WatchFlow
             matches={dashboard.todayMatches}
             items={dashboard.tomorrowMatches}
@@ -46,6 +65,14 @@ export default async function Home() {
 
         <aside className="min-w-0 space-y-5">
           <LiveStack matches={dashboard.liveMatches} />
+          {dashboard.nextMatch && dashboard.liveMatches.length === 0 && (
+            <CountdownClock
+              away={dashboard.nextMatch.away}
+              home={dashboard.nextMatch.home}
+              matchNumber={dashboard.nextMatch.matchNumber}
+              target={dashboard.nextMatch.startsAt}
+            />
+          )}
           <GroupSnapshot groups={dashboard.activeGroups} />
           <InstallAppCta />
           {dashboard.predictions.length > 0 && (

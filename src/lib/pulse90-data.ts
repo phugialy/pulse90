@@ -199,6 +199,7 @@ type TeamRow = {
 };
 
 type FixtureTeamFlagRow = {
+  id: string;
   slug: string;
   fifa_code: string;
   flag_asset_url?: string | null;
@@ -206,8 +207,16 @@ type FixtureTeamFlagRow = {
 };
 
 type FixtureTeamFlag = {
+  id: string;
   assetUrl: string | null;
   emoji: string;
+};
+
+export type VoteTally = {
+  homeVotes: number;
+  drawVotes: number;
+  awayVotes: number;
+  total: number;
 };
 
 type MatchCenterTeamRow = {
@@ -408,6 +417,7 @@ function mapFixture(
   const awayFlag = row.away_team_slug ? teamFlags.get(row.away_team_slug) : undefined;
 
   return {
+    fixtureId: row.id,
     matchNumber: row.match_number,
     status,
     minute: row.minute ? `${row.minute}'` : undefined,
@@ -417,10 +427,12 @@ function mapFixture(
     homeFlagAssetUrl: homeFlag?.assetUrl ?? null,
     homeFlagEmoji: homeFlag?.emoji,
     homeSlug: row.home_team_slug,
+    homeTeamId: homeFlag?.id ?? null,
     away,
     awayFlagAssetUrl: awayFlag?.assetUrl ?? null,
     awayFlagEmoji: awayFlag?.emoji,
     awaySlug: row.away_team_slug,
+    awayTeamId: awayFlag?.id ?? null,
     score:
       row.home_score === null || row.away_score === null
         ? undefined
@@ -446,7 +458,7 @@ async function getFixtureTeamFlags() {
 
   const result = await supabase
     .from("teams")
-    .select("slug, fifa_code, flag_emoji, flag_asset_url");
+    .select("id, slug, fifa_code, flag_emoji, flag_asset_url");
 
   if (result.error) {
     return new Map<string, FixtureTeamFlag>();
@@ -456,11 +468,32 @@ async function getFixtureTeamFlags() {
     (result.data as FixtureTeamFlagRow[]).map((team) => [
       team.slug,
       {
+        id: team.id,
         assetUrl: flagAssetFor(team.fifa_code, team.flag_asset_url),
         emoji: flagFor(team.fifa_code, team.flag_emoji),
       },
     ]),
   );
+}
+
+async function getVoteTally(
+  supabase: NonNullable<ReturnType<typeof getSupabaseReadClient>>,
+  fixtureId: string,
+  homeTeamId: string | null,
+  awayTeamId: string | null,
+): Promise<VoteTally> {
+  const { data } = await supabase
+    .from("fixture_votes")
+    .select("picked_team_id")
+    .eq("fixture_id", fixtureId);
+
+  const rows = (data ?? []) as Array<{ picked_team_id: string | null }>;
+  return {
+    homeVotes: homeTeamId ? rows.filter((r) => r.picked_team_id === homeTeamId).length : 0,
+    drawVotes: rows.filter((r) => r.picked_team_id === null).length,
+    awayVotes: awayTeamId ? rows.filter((r) => r.picked_team_id === awayTeamId).length : 0,
+    total: rows.length,
+  };
 }
 
 function mapUpdate(row: UpdateRow) {
@@ -582,6 +615,7 @@ function buildActiveGroups(rows: LiveGroupProjectionRow[]): ActiveGroup[] {
 }
 
 function fallbackToday() {
+  const emptyTally: VoteTally = { homeVotes: 0, drawVotes: 0, awayVotes: 0, total: 0 };
   return {
     source: "mock" as const,
     liveMatches,
@@ -591,6 +625,8 @@ function fallbackToday() {
     predictions,
     results: [] as Match[],
     activeGroups: [] as ActiveGroup[],
+    nextMatch: null,
+    priorityMatchTally: emptyTally,
   };
 }
 
@@ -651,6 +687,34 @@ export async function getTodayDashboard() {
     (groupProjectionResult.data ?? []) as LiveGroupProjectionRow[],
   );
 
+  // Next upcoming match for countdown clock
+  const now = new Date();
+  const nextRow = rawRows.find(
+    (r) => r.status === "scheduled" && new Date(r.starts_at) > now,
+  );
+  const nextMatch = nextRow
+    ? {
+        matchNumber: nextRow.match_number,
+        startsAt: nextRow.starts_at,
+        home: nextRow.home_team ?? "TBD",
+        away: nextRow.away_team ?? "TBD",
+        fixtureId: nextRow.id,
+      }
+    : null;
+
+  // Vote tally for the priority match (first live, or first upcoming)
+  const priorityMatch = mappedLive[0] ?? upcoming[0];
+  const emptyTally: VoteTally = { homeVotes: 0, drawVotes: 0, awayVotes: 0, total: 0 };
+  const priorityMatchTally: VoteTally =
+    priorityMatch?.fixtureId && priorityMatch.homeTeamId && priorityMatch.awayTeamId
+      ? await getVoteTally(
+          supabase,
+          priorityMatch.fixtureId,
+          priorityMatch.homeTeamId,
+          priorityMatch.awayTeamId,
+        )
+      : emptyTally;
+
   return {
     source: "supabase" as const,
     liveMatches: mappedLive,
@@ -660,6 +724,8 @@ export async function getTodayDashboard() {
     predictions: (predictionsResult.data as PredictionRow[]).map(mapPrediction),
     results,
     activeGroups,
+    nextMatch,
+    priorityMatchTally,
   };
 }
 
@@ -794,13 +860,16 @@ export async function getTeamPath(slug: string) {
 export async function getMatchCenter(matchNumber: string) {
   const supabase = getSupabaseReadClient();
 
+  const emptyTally: VoteTally = { homeVotes: 0, drawVotes: 0, awayVotes: 0, total: 0 };
   const emptyCenter = {
     awayTeam: null,
     awayTeamId: null,
     events: [] as MatchEvent[],
+    fixtureId: null as string | null,
     groupTable: [] as MatchCenterGroupRow[],
     homeTeam: null,
     homeTeamId: null,
+    voteTally: emptyTally,
   };
 
   if (!supabase) {
@@ -847,6 +916,7 @@ export async function getMatchCenter(matchNumber: string) {
     teamRows.map((team) => [
       team.slug,
       {
+        id: team.id,
         assetUrl: flagAssetFor(team.fifa_code, team.flag_asset_url),
         emoji: flagFor(team.fifa_code, team.flag_emoji),
       },
@@ -854,9 +924,10 @@ export async function getMatchCenter(matchNumber: string) {
   );
   const homeTeamRow = teamRows.find((team) => team.slug === fixture.home_team_slug);
   const awayTeamRow = teamRows.find((team) => team.slug === fixture.away_team_slug);
-  const [homeTeam, awayTeam] = await Promise.all([
+  const [homeTeam, awayTeam, voteTally] = await Promise.all([
     homeTeamRow ? getMatchCenterTeam(supabase, homeTeamRow) : Promise.resolve(null),
     awayTeamRow ? getMatchCenterTeam(supabase, awayTeamRow) : Promise.resolve(null),
+    getVoteTally(supabase, fixture.id, homeTeamRow?.id ?? null, awayTeamRow?.id ?? null),
   ]);
   const groupTable = groupResult.error
     ? []
@@ -895,10 +966,12 @@ export async function getMatchCenter(matchNumber: string) {
     awayTeam,
     awayTeamId: awayTeamRow?.id ?? null,
     events,
+    fixtureId: fixture.id,
     groupTable,
     homeTeam,
     homeTeamId: homeTeamRow?.id ?? null,
     match: mapFixture(fixture, teamFlags),
+    voteTally,
   };
 }
 

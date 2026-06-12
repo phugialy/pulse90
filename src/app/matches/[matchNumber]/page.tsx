@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { MatchTeamTabs } from "@/components/match-team-tabs";
+import { WhoWinsVote } from "@/components/who-wins-vote";
 import { PageIntro, StatusPill } from "@/components/ui";
 import {
   getMatchCenter,
@@ -18,7 +19,7 @@ export default async function MatchPage({
   params: Promise<{ matchNumber: string }>;
 }) {
   const { matchNumber } = await params;
-  const { awayTeam, awayTeamId, events, groupTable, homeTeam, homeTeamId, match } =
+  const { awayTeam, awayTeamId, events, fixtureId, groupTable, homeTeam, homeTeamId, match, voteTally } =
     await getMatchCenter(matchNumber);
 
   if (!match) {
@@ -82,6 +83,20 @@ export default async function MatchPage({
               </p>
             </div>
           </section>
+
+          {fixtureId && homeTeamId && awayTeamId && (
+            <WhoWinsVote
+              awayFlagEmoji={awayTeam?.flagEmoji ?? match.awayFlagEmoji}
+              awayName={match.away}
+              awayTeamId={awayTeamId}
+              fixtureId={fixtureId}
+              homeFlagEmoji={homeTeam?.flagEmoji ?? match.homeFlagEmoji}
+              homeName={match.home}
+              homeTeamId={homeTeamId}
+              initialTally={voteTally}
+              status={match.status}
+            />
+          )}
 
           {events.length > 0 && (
             <EventTimeline

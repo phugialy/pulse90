@@ -10,10 +10,13 @@ export type Match = {
   homeFlagAssetUrl?: string | null;
   homeFlagEmoji?: string;
   homeSlug?: string | null;
+  homeTeamId?: string | null;
   away: string;
   awayFlagAssetUrl?: string | null;
   awayFlagEmoji?: string;
   awaySlug?: string | null;
+  awayTeamId?: string | null;
+  fixtureId?: string;
   score?: string;
   place: string;
   venue: string;
