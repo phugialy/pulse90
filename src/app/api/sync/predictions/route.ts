@@ -202,7 +202,45 @@ async function processFixture(
     if (wcGamesByTeam[f.away_team_id] !== undefined) wcGamesByTeam[f.away_team_id]++;
   }
 
-  // Collect all player profiles (both teams)
+  // ------------------------------------------------------------------
+  // Match winner: logistic model on FIFA ranking — runs regardless of
+  // whether we have player data, so "Our call" always appears.
+  // Rank diff > 0 means away team is weaker → home team favored.
+  // ------------------------------------------------------------------
+  const homeTeam = typedTeams.find((t) => t.id === fixture.home_team_id);
+  const awayTeam = typedTeams.find((t) => t.id === fixture.away_team_id);
+  const homeRank = homeTeam?.current_rank ?? 50;
+  const awayRank = awayTeam?.current_rank ?? 50;
+  const rankDiff = awayRank - homeRank;
+  // k=0.015: 50-rank gap → ~68% favourite; 100-rank gap → ~78%
+  const pHome = 1 / (1 + Math.exp(-0.015 * rankDiff));
+  const winnerTeam = pHome >= 0.5 ? homeTeam : awayTeam;
+  const winnerProb = pHome >= 0.5 ? pHome : 1 - pHome;
+
+  // Clear stale model predictions, then insert match_winner first
+  await supabase
+    .from("predictions")
+    .delete()
+    .eq("fixture_id", fixture.id)
+    .eq("source", "model");
+
+  if (winnerTeam && winnerProb > 0.52) {
+    await supabase.from("predictions").insert({
+      tournament_id: tournamentId,
+      fixture_id: fixture.id,
+      prediction_type: "match_winner",
+      subject_type: "team",
+      probability: winnerProb,
+      label: winnerTeam.name,
+      source: "model",
+      model_version: "v1-ranking",
+      valid_until: fixture.starts_at,
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // Player predictions — only if squad data exists
+  // ------------------------------------------------------------------
   const allProfiles: PlayerProfile[] = [];
 
   for (const team of typedTeams) {
@@ -224,25 +262,6 @@ async function processFixture(
   const top5Cards = [...allProfiles]
     .sort((a, b) => b.cardScore - a.cardScore)
     .slice(0, 5);
-
-  // Match winner: logistic model on FIFA ranking (lower rank = stronger)
-  // Rank diff > 0 means away team is worse → home team favored
-  const homeTeam = typedTeams.find((t) => t.id === fixture.home_team_id);
-  const awayTeam = typedTeams.find((t) => t.id === fixture.away_team_id);
-  const homeRank = homeTeam?.current_rank ?? 50;
-  const awayRank = awayTeam?.current_rank ?? 50;
-  const rankDiff = awayRank - homeRank;
-  // k=0.015: 50-rank gap → ~68% favourite; 100-rank gap → ~78%
-  const pHome = 1 / (1 + Math.exp(-0.015 * rankDiff));
-  const winnerTeam = pHome >= 0.5 ? homeTeam : awayTeam;
-  const winnerProb = pHome >= 0.5 ? pHome : 1 - pHome;
-
-  // Replace all model predictions for this fixture
-  await supabase
-    .from("predictions")
-    .delete()
-    .eq("fixture_id", fixture.id)
-    .eq("source", "model");
 
   const rows = [
     ...top5Goals.map((p) => ({
@@ -267,22 +286,6 @@ async function processFixture(
       model_version: "v1-position-weighted",
       valid_until: fixture.starts_at,
     })),
-    // Match winner — only emit when there's a discernible favourite (>52%)
-    ...(winnerTeam && winnerProb > 0.52
-      ? [
-          {
-            tournament_id: tournamentId,
-            fixture_id: fixture.id,
-            prediction_type: "match_winner",
-            subject_type: "team",
-            probability: winnerProb,
-            label: winnerTeam.name,
-            source: "model",
-            model_version: "v1-ranking",
-            valid_until: fixture.starts_at,
-          },
-        ]
-      : []),
   ];
 
   await supabase.from("predictions").insert(rows);
