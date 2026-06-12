@@ -176,13 +176,16 @@ async function processFixture(
 ) {
   const teamIds = [fixture.home_team_id, fixture.away_team_id];
 
-  // Get team info for both sides
+  // Get team info for both sides (current_rank used for match winner model)
   const { data: teams } = await supabase
     .from("teams")
-    .select("id, slug, name")
+    .select("id, slug, name, current_rank")
     .in("id", teamIds);
 
   if (!teams || teams.length < 2) return;
+
+  type TeamRow = { id: string; slug: string; name: string; current_rank: number | null };
+  const typedTeams = teams as TeamRow[];
 
   // WC games played per team (denominator for WC event rates)
   const { data: wcFixtures } = await supabase
@@ -202,7 +205,7 @@ async function processFixture(
   // Collect all player profiles (both teams)
   const allProfiles: PlayerProfile[] = [];
 
-  for (const team of teams as { id: string; slug: string; name: string }[]) {
+  for (const team of typedTeams) {
     const profiles = await buildTeamProfiles(
       supabase,
       team,
@@ -222,12 +225,24 @@ async function processFixture(
     .sort((a, b) => b.cardScore - a.cardScore)
     .slice(0, 5);
 
-  // Replace existing predictions for this fixture
+  // Match winner: logistic model on FIFA ranking (lower rank = stronger)
+  // Rank diff > 0 means away team is worse → home team favored
+  const homeTeam = typedTeams.find((t) => t.id === fixture.home_team_id);
+  const awayTeam = typedTeams.find((t) => t.id === fixture.away_team_id);
+  const homeRank = homeTeam?.current_rank ?? 50;
+  const awayRank = awayTeam?.current_rank ?? 50;
+  const rankDiff = awayRank - homeRank;
+  // k=0.015: 50-rank gap → ~68% favourite; 100-rank gap → ~78%
+  const pHome = 1 / (1 + Math.exp(-0.015 * rankDiff));
+  const winnerTeam = pHome >= 0.5 ? homeTeam : awayTeam;
+  const winnerProb = pHome >= 0.5 ? pHome : 1 - pHome;
+
+  // Replace all model predictions for this fixture
   await supabase
     .from("predictions")
     .delete()
     .eq("fixture_id", fixture.id)
-    .in("prediction_type", ["player_goal", "player_card"]);
+    .eq("source", "model");
 
   const rows = [
     ...top5Goals.map((p) => ({
@@ -252,6 +267,22 @@ async function processFixture(
       model_version: "v1-position-weighted",
       valid_until: fixture.starts_at,
     })),
+    // Match winner — only emit when there's a discernible favourite (>52%)
+    ...(winnerTeam && winnerProb > 0.52
+      ? [
+          {
+            tournament_id: tournamentId,
+            fixture_id: fixture.id,
+            prediction_type: "match_winner",
+            subject_type: "team",
+            probability: winnerProb,
+            label: winnerTeam.name,
+            source: "model",
+            model_version: "v1-ranking",
+            valid_until: fixture.starts_at,
+          },
+        ]
+      : []),
   ];
 
   await supabase.from("predictions").insert(rows);
