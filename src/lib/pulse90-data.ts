@@ -736,6 +736,10 @@ export async function getTodayDashboard() {
         home: nextRow.home_team ?? "TBD",
         away: nextRow.away_team ?? "TBD",
         fixtureId: nextRow.id,
+        homeFlagEmoji: nextRow.home_team_slug ? (teamFlags.get(nextRow.home_team_slug)?.emoji ?? "🏳") : "🏳",
+        homeFlagAssetUrl: nextRow.home_team_slug ? (teamFlags.get(nextRow.home_team_slug)?.assetUrl ?? null) : null,
+        awayFlagEmoji: nextRow.away_team_slug ? (teamFlags.get(nextRow.away_team_slug)?.emoji ?? "🏳") : "🏳",
+        awayFlagAssetUrl: nextRow.away_team_slug ? (teamFlags.get(nextRow.away_team_slug)?.assetUrl ?? null) : null,
       }
     : null;
 

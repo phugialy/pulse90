@@ -39,6 +39,20 @@ export default async function Home() {
           </div>
 
           <ResultsRibbon matches={dashboard.results} />
+          {dashboard.nextMatch && dashboard.liveMatches.length === 0 && (
+            <div className="lg:hidden">
+              <CountdownClock
+                away={dashboard.nextMatch.away}
+                awayFlagAssetUrl={dashboard.nextMatch.awayFlagAssetUrl}
+                awayFlagEmoji={dashboard.nextMatch.awayFlagEmoji}
+                home={dashboard.nextMatch.home}
+                homeFlagAssetUrl={dashboard.nextMatch.homeFlagAssetUrl}
+                homeFlagEmoji={dashboard.nextMatch.homeFlagEmoji}
+                matchNumber={dashboard.nextMatch.matchNumber}
+                target={dashboard.nextMatch.startsAt}
+              />
+            </div>
+          )}
           <PriorityMatch match={priorityMatch} matchWinner={dashboard.priorityMatchWinner} />
 
           {priorityMatch?.fixtureId &&
@@ -66,12 +80,18 @@ export default async function Home() {
         <aside className="min-w-0 space-y-5">
           <LiveStack matches={dashboard.liveMatches} />
           {dashboard.nextMatch && dashboard.liveMatches.length === 0 && (
-            <CountdownClock
-              away={dashboard.nextMatch.away}
-              home={dashboard.nextMatch.home}
-              matchNumber={dashboard.nextMatch.matchNumber}
-              target={dashboard.nextMatch.startsAt}
-            />
+            <div className="hidden lg:block">
+              <CountdownClock
+                away={dashboard.nextMatch.away}
+                awayFlagAssetUrl={dashboard.nextMatch.awayFlagAssetUrl}
+                awayFlagEmoji={dashboard.nextMatch.awayFlagEmoji}
+                home={dashboard.nextMatch.home}
+                homeFlagAssetUrl={dashboard.nextMatch.homeFlagAssetUrl}
+                homeFlagEmoji={dashboard.nextMatch.homeFlagEmoji}
+                matchNumber={dashboard.nextMatch.matchNumber}
+                target={dashboard.nextMatch.startsAt}
+              />
+            </div>
           )}
           <GroupSnapshot groups={dashboard.activeGroups} />
           <InstallAppCta />

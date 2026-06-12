@@ -116,6 +116,10 @@ export function PriorityMatch({
 
       <div className="mt-7 grid gap-6 xl:grid-cols-[1fr_240px] xl:items-end">
         <div>
+          <div className="mb-3 flex items-center gap-2">
+            <FlagImg src={match.homeFlagAssetUrl} emoji={match.homeFlagEmoji} alt={match.home} />
+            <FlagImg src={match.awayFlagAssetUrl} emoji={match.awayFlagEmoji} alt={match.away} />
+          </div>
           <p className="text-sm font-bold uppercase tracking-[0.22em] text-cobalt">
             {match.reason}
           </p>
@@ -156,9 +160,9 @@ export function PriorityMatch({
             <p>{match.place}</p>
           </div>
           {matchWinner && (
-            <div className="mt-3 flex items-center gap-2 rounded-xl bg-cobalt/8 px-3 py-2">
-              <Sparkles className="size-3.5 shrink-0 text-cobalt" />
-              <p className="text-xs font-black text-cobalt">
+            <div className="mt-3 flex items-center gap-2 rounded-xl bg-cobalt px-3 py-2.5">
+              <Sparkles className="size-4 shrink-0 text-white/70" />
+              <p className="text-sm font-black text-white">
                 Our call: {matchWinner}
               </p>
             </div>
