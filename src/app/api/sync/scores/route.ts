@@ -249,8 +249,8 @@ export async function GET(request: NextRequest) {
 
   const now = new Date();
   const preMatchCutoff = new Date(now.getTime() + PRE_MATCH_MINUTES * 60 * 1000);
-  const startOfDay = new Date(now);
-  startOfDay.setUTCHours(0, 0, 0, 0);
+  // 48h lookback catches matches that kicked off in US evening (yesterday UTC)
+  const backfillCutoff = new Date(now.getTime() - 48 * 60 * 60 * 1000);
 
   // ------------------------------------------------------------------
   // Parallel queries: active fixtures (score sync) + completed today (event backfill)
@@ -268,7 +268,7 @@ export async function GET(request: NextRequest) {
       .from("fixtures")
       .select("id, home_team_id, away_team_id, match_number")
       .eq("status", "completed")
-      .gte("starts_at", startOfDay.toISOString()),
+      .gte("starts_at", backfillCutoff.toISOString()),
   ]);
 
   if (windowResult.error) {
