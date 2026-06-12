@@ -6,6 +6,7 @@ import { PageIntro, StatusPill } from "@/components/ui";
 import {
   getMatchCenter,
   type MatchCenterGroupRow,
+  type MatchEvent,
 } from "@/lib/pulse90-data";
 import { CalendarDays, Clock3, MapPin, Trophy } from "lucide-react";
 
@@ -17,7 +18,8 @@ export default async function MatchPage({
   params: Promise<{ matchNumber: string }>;
 }) {
   const { matchNumber } = await params;
-  const { awayTeam, groupTable, homeTeam, match } = await getMatchCenter(matchNumber);
+  const { awayTeam, awayTeamId, events, groupTable, homeTeam, homeTeamId, match } =
+    await getMatchCenter(matchNumber);
 
   if (!match) {
     notFound();
@@ -63,7 +65,9 @@ export default async function MatchPage({
 
             <div className="mt-6 flex flex-wrap gap-2">
               {match.date ? <StatusPill icon={CalendarDays}>{match.date}</StatusPill> : null}
-              <StatusPill icon={Clock3}>{match.minute ?? match.time}</StatusPill>
+              <StatusPill icon={Clock3}>
+                {match.status === "completed" ? "FT" : (match.minute ?? match.time)}
+              </StatusPill>
               <StatusPill icon={Trophy}>{formatStage(match.stage)}</StatusPill>
               <StatusPill icon={MapPin}>{match.venue}</StatusPill>
               <StatusPill icon={MapPin}>{match.place}</StatusPill>
@@ -78,6 +82,14 @@ export default async function MatchPage({
               </p>
             </div>
           </section>
+
+          {events.length > 0 && (
+            <EventTimeline
+              events={events}
+              homeTeamId={homeTeamId}
+              awayTeamId={awayTeamId}
+            />
+          )}
 
           <MatchTeamTabs awayTeam={awayTeam} homeTeam={homeTeam} />
         </section>
@@ -213,4 +225,126 @@ function GroupTable({ group, rows }: { group: string; rows: MatchCenterGroupRow[
 
 function formatStage(stage: string) {
   return stage === "group" ? "Group stage" : stage;
+}
+
+function eventIcon(eventType: string) {
+  switch (eventType) {
+    case "goal":
+      return "⚽";
+    case "own_goal":
+      return "⚽";
+    case "penalty_goal":
+      return "⚽";
+    case "yellow_card":
+      return "🟨";
+    case "red_card":
+      return "🟥";
+    default:
+      return "•";
+  }
+}
+
+function EventTimeline({
+  events,
+  homeTeamId,
+  awayTeamId,
+}: {
+  events: MatchEvent[];
+  homeTeamId: string | null;
+  awayTeamId: string | null;
+}) {
+  const goals = events.filter((e) =>
+    e.eventType === "goal" || e.eventType === "own_goal" || e.eventType === "penalty_goal",
+  );
+  const cards = events.filter((e) =>
+    e.eventType === "yellow_card" || e.eventType === "red_card",
+  );
+
+  return (
+    <section className="overflow-hidden rounded-[28px] border border-[#10131a]/10 bg-white p-5 shadow-sm sm:p-6">
+      <p className="text-xs font-black uppercase tracking-[0.2em] text-[#10131a]/60">
+        Match events
+      </p>
+
+      {goals.length > 0 && (
+        <div className="mt-4">
+          <div className="grid grid-cols-[1fr_44px_1fr] items-start gap-2">
+            {/* Home goals */}
+            <div className="space-y-2">
+              {goals
+                .filter((e) => e.teamId === homeTeamId)
+                .map((e, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    <span className="text-base leading-none">⚽</span>
+                    <span className="font-black text-[#10131a]">{e.title}</span>
+                    {e.eventType === "own_goal" && (
+                      <span className="rounded-full bg-[#10131a]/8 px-2 py-0.5 text-[10px] font-black text-[#10131a]/50">
+                        OG
+                      </span>
+                    )}
+                    {e.eventType === "penalty_goal" && (
+                      <span className="rounded-full bg-cobalt/10 px-2 py-0.5 text-[10px] font-black text-cobalt">
+                        PEN
+                      </span>
+                    )}
+                  </div>
+                ))}
+            </div>
+
+            {/* Center divider */}
+            <div className="flex justify-center pt-1">
+              <div className="h-full w-px bg-[#10131a]/10" />
+            </div>
+
+            {/* Away goals */}
+            <div className="space-y-2">
+              {goals
+                .filter((e) => e.teamId === awayTeamId)
+                .map((e, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    <span className="text-base leading-none">⚽</span>
+                    <span className="font-black text-[#10131a]">{e.title}</span>
+                    {e.eventType === "own_goal" && (
+                      <span className="rounded-full bg-[#10131a]/8 px-2 py-0.5 text-[10px] font-black text-[#10131a]/50">
+                        OG
+                      </span>
+                    )}
+                    {e.eventType === "penalty_goal" && (
+                      <span className="rounded-full bg-cobalt/10 px-2 py-0.5 text-[10px] font-black text-cobalt">
+                        PEN
+                      </span>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {goals.length === 0 && (
+        <p className="mt-4 rounded-2xl bg-stadium p-3 text-sm font-bold text-[#10131a]/50">
+          No goals recorded
+        </p>
+      )}
+
+      {cards.length > 0 && (
+        <div className="mt-4 border-t border-[#10131a]/8 pt-4">
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#10131a]/42">
+            Cards
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {cards.map((e, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#10131a]/10 bg-stadium px-3 py-1 text-xs font-black text-[#10131a]"
+              >
+                <span className="text-sm leading-none">{eventIcon(e.eventType)}</span>
+                {e.title}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }

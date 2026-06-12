@@ -28,7 +28,19 @@ type TeamRow = {
 type EspnCompetitor = {
   homeAway: "home" | "away";
   score: string;
-  team: { abbreviation: string; displayName: string };
+  team: { id: string; abbreviation: string; displayName: string };
+};
+
+type EspnDetail = {
+  type: { text: string };
+  clock: { displayValue: string };
+  team: { id: string };
+  athletesInvolved?: Array<{ displayName: string }>;
+  scoringPlay: boolean;
+  ownGoal: boolean;
+  penaltyKick: boolean;
+  yellowCard: boolean;
+  redCard: boolean;
 };
 
 type EspnStatus = {
@@ -41,7 +53,20 @@ type EspnEvent = {
   id: string;
   date: string;
   status: EspnStatus;
-  competitions: Array<{ competitors: EspnCompetitor[] }>;
+  competitions: Array<{
+    competitors: EspnCompetitor[];
+    details?: EspnDetail[];
+  }>;
+};
+
+type MatchEventInsert = {
+  fixture_id: string;
+  team_id: string | null;
+  event_type: string;
+  minute: number | null;
+  stoppage_minute: number | null;
+  title: string;
+  importance: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -64,7 +89,6 @@ async function fetchEspnScores(): Promise<EspnEvent[]> {
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "pulse90-sync/1.0" },
-      // Never serve stale data for live scores
       cache: "no-store",
     });
     if (!res.ok) return [];
@@ -97,10 +121,8 @@ function toOurStatus(
 
 function parseMinute(clock: string, period: number): number | null {
   if (!clock) return null;
-  // ESPN format: "43:00", "90:00+5" etc.
   const base = parseInt(clock.split(":")[0], 10);
   if (isNaN(base)) return null;
-  // Second half — floor at 45
   if (period === 2) return Math.max(45, base);
   return base;
 }
@@ -128,6 +150,74 @@ function findEspnEvent(
   });
 }
 
+function parseDisplayMinute(displayValue: string): {
+  minute: number | null;
+  stoppageMinute: number | null;
+} {
+  const cleaned = (displayValue ?? "").replace("'", "").trim();
+  const parts = cleaned.split("+");
+  const minute = parseInt(parts[0], 10);
+  const stoppageRaw = parts.length > 1 ? parseInt(parts[1], 10) : null;
+  return {
+    minute: isNaN(minute) ? null : minute,
+    stoppageMinute: stoppageRaw !== null && !isNaN(stoppageRaw) ? stoppageRaw : null,
+  };
+}
+
+function buildMatchEvents(
+  fixtureId: string,
+  details: EspnDetail[],
+  espnIdToTeamId: Map<string, string>,
+): MatchEventInsert[] {
+  const events: MatchEventInsert[] = [];
+
+  for (const detail of details) {
+    const playerName = detail.athletesInvolved?.[0]?.displayName ?? "Unknown";
+    const teamId = detail.team?.id ? (espnIdToTeamId.get(detail.team.id) ?? null) : null;
+    const { minute, stoppageMinute } = parseDisplayMinute(detail.clock.displayValue);
+    const minStr =
+      minute !== null ? `${minute}${stoppageMinute ? `+${stoppageMinute}` : ""}'` : "";
+
+    if (detail.scoringPlay) {
+      events.push({
+        fixture_id: fixtureId,
+        team_id: teamId,
+        event_type: detail.ownGoal
+          ? "own_goal"
+          : detail.penaltyKick
+            ? "penalty_goal"
+            : "goal",
+        minute,
+        stoppage_minute: stoppageMinute,
+        title: `${playerName} ${minStr}`.trim(),
+        importance: 5,
+      });
+    } else if (detail.redCard) {
+      events.push({
+        fixture_id: fixtureId,
+        team_id: teamId,
+        event_type: "red_card",
+        minute,
+        stoppage_minute: stoppageMinute,
+        title: `${playerName} ${minStr}`.trim(),
+        importance: 4,
+      });
+    } else if (detail.yellowCard) {
+      events.push({
+        fixture_id: fixtureId,
+        team_id: teamId,
+        event_type: "yellow_card",
+        minute,
+        stoppage_minute: stoppageMinute,
+        title: `${playerName} ${minStr}`.trim(),
+        importance: 2,
+      });
+    }
+  }
+
+  return events;
+}
+
 // ---------------------------------------------------------------------------
 // Route handler
 // ---------------------------------------------------------------------------
@@ -136,9 +226,7 @@ export async function GET(request: NextRequest) {
   const startedAt = Date.now();
 
   // ------------------------------------------------------------------
-  // Auth: Vercel cron sends Authorization: Bearer <CRON_SECRET>
-  // Also accept ?secret= for manual dev calls when CRON_SECRET is set.
-  // If CRON_SECRET is not set (local dev), skip the check entirely.
+  // Auth
   // ------------------------------------------------------------------
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
@@ -161,23 +249,29 @@ export async function GET(request: NextRequest) {
 
   const now = new Date();
   const preMatchCutoff = new Date(now.getTime() + PRE_MATCH_MINUTES * 60 * 1000);
+  const startOfDay = new Date(now);
+  startOfDay.setUTCHours(0, 0, 0, 0);
 
   // ------------------------------------------------------------------
-  // Find fixtures that are live OR scheduled but already started
-  // (covers catch-up: matches that completed while the sync was down)
-  // "scheduled" + starts_at <= now+5min = kickoff imminent or already past
-  // The DB trigger handles standings the moment we write the score.
+  // Parallel queries: active fixtures (score sync) + completed today (event backfill)
   // ------------------------------------------------------------------
-  const { data: windowFixtures, error: windowError } = await supabase
-    .from("fixtures")
-    .select(
-      "id, tournament_id, match_number, starts_at, status, group_code, minute, home_score, away_score, home_team_id, away_team_id",
-    )
-    .in("status", ["live", "scheduled"])
-    .lte("starts_at", preMatchCutoff.toISOString())
-    .order("starts_at", { ascending: true });
+  const [windowResult, completedResult] = await Promise.all([
+    supabase
+      .from("fixtures")
+      .select(
+        "id, tournament_id, match_number, starts_at, status, group_code, minute, home_score, away_score, home_team_id, away_team_id",
+      )
+      .in("status", ["live", "scheduled"])
+      .lte("starts_at", preMatchCutoff.toISOString())
+      .order("starts_at", { ascending: true }),
+    supabase
+      .from("fixtures")
+      .select("id, home_team_id, away_team_id, match_number")
+      .eq("status", "completed")
+      .gte("starts_at", startOfDay.toISOString()),
+  ]);
 
-  if (windowError) {
+  if (windowResult.error) {
     await writeJobRun(supabase, {
       job_name: "score_sync",
       status: "failed",
@@ -186,16 +280,38 @@ export async function GET(request: NextRequest) {
       duration_ms: Date.now() - startedAt,
       records_read: 0,
       records_changed: 0,
-      error_message: windowError.message,
+      error_message: windowResult.error.message,
       metadata: {},
     });
-    return NextResponse.json({ error: windowError.message }, { status: 500 });
+    return NextResponse.json({ error: windowResult.error.message }, { status: 500 });
+  }
+
+  const windowFixtures = (windowResult.data ?? []) as FixtureRow[];
+  const completedToday = (completedResult.data ?? []) as Pick<
+    FixtureRow,
+    "id" | "home_team_id" | "away_team_id" | "match_number"
+  >[];
+
+  // ------------------------------------------------------------------
+  // Determine completed fixtures that still need events synced
+  // ------------------------------------------------------------------
+  let completedNeedingEvents: typeof completedToday = [];
+  if (completedToday.length > 0) {
+    const { data: hasEvents } = await supabase
+      .from("match_events")
+      .select("fixture_id")
+      .in(
+        "fixture_id",
+        completedToday.map((f) => f.id),
+      );
+    const withEventsSet = new Set((hasEvents ?? []).map((e: { fixture_id: string }) => e.fixture_id));
+    completedNeedingEvents = completedToday.filter((f) => !withEventsSet.has(f.id));
   }
 
   // ------------------------------------------------------------------
-  // Smart skip: nothing in window — report next match time and bail
+  // Smart skip: nothing in score window AND no event backfill needed
   // ------------------------------------------------------------------
-  if (!windowFixtures || windowFixtures.length === 0) {
+  if (windowFixtures.length === 0 && completedNeedingEvents.length === 0) {
     const { data: next } = await supabase
       .from("fixtures")
       .select("starts_at, match_number")
@@ -233,13 +349,12 @@ export async function GET(request: NextRequest) {
   // ------------------------------------------------------------------
   // Fetch team info for all involved fixtures
   // ------------------------------------------------------------------
+  const allFixtureIds = [
+    ...windowFixtures,
+    ...completedNeedingEvents,
+  ];
   const teamIds = [
-    ...new Set(
-      (windowFixtures as FixtureRow[]).flatMap((f) => [
-        f.home_team_id,
-        f.away_team_id,
-      ]),
-    ),
+    ...new Set(allFixtureIds.flatMap((f) => [f.home_team_id, f.away_team_id])),
   ];
   const { data: teamRows } = await supabase
     .from("teams")
@@ -256,10 +371,7 @@ export async function GET(request: NextRequest) {
   const espnEvents = await fetchEspnScores();
 
   // ------------------------------------------------------------------
-  // Update each fixture in the window.
-  // Writing home_score/away_score/status fires the DB trigger
-  // recalculate_group_standings_on_fixture_change automatically —
-  // no application-level standings work needed.
+  // Score sync loop — also syncs events for newly completed fixtures
   // ------------------------------------------------------------------
   type UpdateRecord = {
     matchNumber: number;
@@ -270,7 +382,7 @@ export async function GET(request: NextRequest) {
   };
   const updated: UpdateRecord[] = [];
 
-  for (const fixture of windowFixtures as FixtureRow[]) {
+  for (const fixture of windowFixtures) {
     const homeTeam = teamMap.get(fixture.home_team_id);
     const awayTeam = teamMap.get(fixture.away_team_id);
     if (!homeTeam || !awayTeam) continue;
@@ -293,35 +405,81 @@ export async function GET(request: NextRequest) {
     const homeScoreVal = isNaN(newHomeScore!) ? null : newHomeScore;
     const awayScoreVal = isNaN(newAwayScore!) ? null : newAwayScore;
 
-    // Skip if nothing changed
-    if (
-      homeScoreVal === fixture.home_score &&
-      awayScoreVal === fixture.away_score &&
-      newStatus === fixture.status &&
-      newMinute === fixture.minute
-    ) {
-      continue;
-    }
+    const scoreChanged =
+      homeScoreVal !== fixture.home_score ||
+      awayScoreVal !== fixture.away_score ||
+      newStatus !== fixture.status ||
+      newMinute !== fixture.minute;
 
-    await supabase
-      .from("fixtures")
-      .update({
-        home_score: homeScoreVal,
-        away_score: awayScoreVal,
+    if (scoreChanged) {
+      await supabase
+        .from("fixtures")
+        .update({
+          home_score: homeScoreVal,
+          away_score: awayScoreVal,
+          status: newStatus,
+          minute: newMinute,
+          source_updated_at: now.toISOString(),
+          updated_at: now.toISOString(),
+        })
+        .eq("id", fixture.id);
+
+      updated.push({
+        matchNumber: fixture.match_number,
+        home: homeScoreVal,
+        away: awayScoreVal,
         status: newStatus,
         minute: newMinute,
-        source_updated_at: now.toISOString(),
-        updated_at: now.toISOString(),
-      })
-      .eq("id", fixture.id);
+      });
+    }
 
-    updated.push({
-      matchNumber: fixture.match_number,
-      home: homeScoreVal,
-      away: awayScoreVal,
-      status: newStatus,
-      minute: newMinute,
-    });
+    // Sync match events when fixture is completed and ESPN has details
+    if (newStatus === "completed" && (comp?.details?.length ?? 0) > 0) {
+      const espnIdToTeamId = new Map<string, string>();
+      if (hComp) espnIdToTeamId.set(hComp.team.id, fixture.home_team_id);
+      if (aComp) espnIdToTeamId.set(aComp.team.id, fixture.away_team_id);
+      const eventsToInsert = buildMatchEvents(fixture.id, comp!.details!, espnIdToTeamId);
+      if (eventsToInsert.length > 0) {
+        // Upsert guard: only insert if no events exist (prevents double inserts)
+        const { count: existing } = await supabase
+          .from("match_events")
+          .select("id", { count: "exact", head: true })
+          .eq("fixture_id", fixture.id);
+        if (!existing) {
+          await supabase.from("match_events").insert(eventsToInsert);
+        }
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Event backfill: completed today fixtures that still need events
+  // ------------------------------------------------------------------
+  let eventsBackfilled = 0;
+
+  for (const fixture of completedNeedingEvents) {
+    const homeTeam = teamMap.get(fixture.home_team_id);
+    const awayTeam = teamMap.get(fixture.away_team_id);
+    if (!homeTeam || !awayTeam) continue;
+
+    const espnEvt = findEspnEvent(espnEvents, homeTeam, awayTeam);
+    if (!espnEvt) continue;
+
+    const comp = espnEvt.competitions[0];
+    const details = comp?.details ?? [];
+    if (details.length === 0) continue;
+
+    const hComp = comp.competitors.find((c) => c.homeAway === "home");
+    const aComp = comp.competitors.find((c) => c.homeAway === "away");
+    const espnIdToTeamId = new Map<string, string>();
+    if (hComp) espnIdToTeamId.set(hComp.team.id, fixture.home_team_id);
+    if (aComp) espnIdToTeamId.set(aComp.team.id, fixture.away_team_id);
+
+    const eventsToInsert = buildMatchEvents(fixture.id, details, espnIdToTeamId);
+    if (eventsToInsert.length > 0) {
+      await supabase.from("match_events").insert(eventsToInsert);
+      eventsBackfilled++;
+    }
   }
 
   // ------------------------------------------------------------------
@@ -338,6 +496,7 @@ export async function GET(request: NextRequest) {
     metadata: {
       espnEventsFound: espnEvents.length,
       fixtures: updated,
+      eventsBackfilled,
     },
   });
 
@@ -346,6 +505,7 @@ export async function GET(request: NextRequest) {
     timestamp: now.toISOString(),
     activeFixtures: windowFixtures.length,
     updated,
+    eventsBackfilled,
     durationMs: Date.now() - startedAt,
   });
 }

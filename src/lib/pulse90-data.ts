@@ -14,6 +14,7 @@ import {
 } from "@/lib/mock-data";
 
 type FixtureCardRow = {
+  id: string;
   match_number: number;
   status: "scheduled" | "live" | "completed" | "postponed" | "cancelled";
   minute: number | null;
@@ -143,6 +144,15 @@ export type MatchCenterTeam = {
   name: string;
   slug: string;
   squad: SquadPlayer[];
+};
+
+export type MatchEvent = {
+  eventType: string;
+  minute: number | null;
+  stoppageMinute: number | null;
+  title: string;
+  teamId: string | null;
+  importance: number;
 };
 
 export type ActiveGroupTeam = {
@@ -784,13 +794,17 @@ export async function getTeamPath(slug: string) {
 export async function getMatchCenter(matchNumber: string) {
   const supabase = getSupabaseReadClient();
 
+  const emptyCenter = {
+    awayTeam: null,
+    awayTeamId: null,
+    events: [] as MatchEvent[],
+    groupTable: [] as MatchCenterGroupRow[],
+    homeTeam: null,
+    homeTeamId: null,
+  };
+
   if (!supabase) {
-    return {
-      awayTeam: null,
-      groupTable: [] as MatchCenterGroupRow[],
-      homeTeam: null,
-      match: getMatch(matchNumber),
-    };
+    return { ...emptyCenter, match: getMatch(matchNumber) };
   }
 
   const result = await supabase
@@ -800,19 +814,14 @@ export async function getMatchCenter(matchNumber: string) {
     .single();
 
   if (result.error || !result.data) {
-    return {
-      awayTeam: null,
-      groupTable: [] as MatchCenterGroupRow[],
-      homeTeam: null,
-      match: getMatch(matchNumber),
-    };
+    return { ...emptyCenter, match: getMatch(matchNumber) };
   }
 
   const fixture = result.data as FixtureCardRow;
   const teamSlugs = [fixture.home_team_slug, fixture.away_team_slug].filter(
     (slug): slug is string => Boolean(slug),
   );
-  const [teamsResult, groupResult] = await Promise.all([
+  const [teamsResult, groupResult, eventsResult] = await Promise.all([
     supabase
       .from("teams")
       .select("id, slug, name, fifa_code, flag_emoji, flag_asset_url, group_code")
@@ -826,6 +835,12 @@ export async function getMatchCenter(matchNumber: string) {
           .eq("group_code", fixture.group_code)
           .order("projected_rank", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
+    supabase
+      .from("match_events")
+      .select("event_type, minute, stoppage_minute, title, team_id, importance")
+      .eq("fixture_id", fixture.id)
+      .order("minute", { ascending: true, nullsFirst: false })
+      .order("importance", { ascending: false }),
   ]);
   const teamRows = teamsResult.error ? [] : (teamsResult.data as MatchCenterTeamRow[]);
   const teamFlags = new Map(
@@ -857,10 +872,32 @@ export async function getMatchCenter(matchNumber: string) {
         slug: standing.slug,
       }));
 
+  type MatchEventRow = {
+    event_type: string;
+    minute: number | null;
+    stoppage_minute: number | null;
+    title: string;
+    team_id: string | null;
+    importance: number;
+  };
+  const events: MatchEvent[] = eventsResult.error
+    ? []
+    : (eventsResult.data as MatchEventRow[]).map((row) => ({
+        eventType: row.event_type,
+        minute: row.minute,
+        stoppageMinute: row.stoppage_minute,
+        title: row.title,
+        teamId: row.team_id,
+        importance: row.importance,
+      }));
+
   return {
     awayTeam,
+    awayTeamId: awayTeamRow?.id ?? null,
+    events,
     groupTable,
     homeTeam,
+    homeTeamId: homeTeamRow?.id ?? null,
     match: mapFixture(fixture, teamFlags),
   };
 }
