@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { MatchTeamTabs } from "@/components/match-team-tabs";
 import { WhoWinsVote } from "@/components/who-wins-vote";
-import { PageIntro, StatusPill } from "@/components/ui";
+import { PageIntro, StatusPill, WhereToWatch } from "@/components/ui";
 import { Sparkles } from "lucide-react";
 import {
   getMatchCenter,
@@ -132,6 +132,7 @@ export default async function MatchPage({
         </section>
 
         <aside className="min-w-0 space-y-5">
+          {match.status === "live" && <WhereToWatch />}
           <GroupTable group={match.group} rows={groupTable} />
           <section className="rounded-[24px] border border-lime-200/20 bg-lime-300 p-5 text-black">
             <p className="text-sm font-black uppercase tracking-[0.18em]">

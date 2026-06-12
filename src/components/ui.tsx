@@ -11,6 +11,7 @@ import {
   Radio,
   Shield,
   Sparkles,
+  Tv,
   TrendingDown,
   TrendingUp,
   Trophy,
@@ -167,13 +168,26 @@ export function PriorityMatch({
               </p>
             </div>
           )}
-          <Link
-            className="mt-5 inline-flex h-10 items-center gap-2 rounded-full bg-[#10131a] px-4 text-sm font-black text-white transition hover:bg-cobalt"
-            href={`/matches/${match.matchNumber}`}
-          >
-            Match center
-            <ArrowUpRight className="size-4" />
-          </Link>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Link
+              className="inline-flex h-10 items-center gap-2 rounded-full bg-[#10131a] px-4 text-sm font-black text-white transition hover:bg-cobalt"
+              href={`/matches/${match.matchNumber}`}
+            >
+              Match center
+              <ArrowUpRight className="size-4" />
+            </Link>
+            {isLive && (
+              <a
+                className="inline-flex h-10 items-center gap-2 rounded-full border border-cobalt/30 bg-cobalt/8 px-4 text-sm font-black text-cobalt transition hover:bg-cobalt hover:text-white"
+                href="https://www.fifa.com/fifaplus/en/tournaments/mens/worldcup/canadamexicousa2026"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                <Tv className="size-4" />
+                Watch live
+              </a>
+            )}
+          </div>
         </div>
       </div>
     </section>
@@ -201,28 +215,86 @@ export function LiveStack({ matches = liveMatches }: { matches?: Match[] }) {
       ) : null}
       <div className="space-y-3">
         {sideMatches.map((match) => (
-          <Link
-            className="block rounded-2xl border border-[#10131a]/10 bg-stadium p-4 transition hover:border-cobalt/40"
-            href={`/matches/${match.matchNumber}`}
-            key={`${match.home}-${match.away}`}
-          >
+          <div key={`${match.home}-${match.away}`} className="rounded-2xl border border-[#10131a]/10 bg-stadium p-4">
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-bold text-[#10131a]/60">{match.minute}</p>
               <p className="rounded-full bg-[#10131a]/5 px-2.5 py-1 text-xs font-bold text-[#10131a]/70">
                 {match.reason}
               </p>
             </div>
-            <p className="mt-3 text-xl font-black text-[#10131a]">
-              {match.home}{" "}
-              <span className="font-mono text-cobalt">{match.score}</span>{" "}
-              {match.away}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[#10131a]/62">
-              {match.stakes}
-            </p>
-          </Link>
+            <Link href={`/matches/${match.matchNumber}`}>
+              <p className="mt-3 text-xl font-black text-[#10131a] transition hover:text-cobalt">
+                {match.home}{" "}
+                <span className="font-mono text-cobalt">{match.score}</span>{" "}
+                {match.away}
+              </p>
+            </Link>
+            <p className="mt-2 text-sm leading-6 text-[#10131a]/62">{match.stakes}</p>
+            <div className="mt-3 flex gap-2">
+              <Link
+                href={`/matches/${match.matchNumber}`}
+                className="inline-flex items-center rounded-full border border-[#10131a]/10 bg-white px-3 py-1.5 text-xs font-black text-[#10131a]/70 transition hover:border-cobalt/30 hover:text-cobalt"
+              >
+                Match center
+              </Link>
+              <a
+                href="https://www.fifa.com/fifaplus/en/tournaments/mens/worldcup/canadamexicousa2026"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full bg-cobalt px-3 py-1.5 text-xs font-black text-white transition hover:bg-cobalt/80"
+              >
+                <Tv className="size-3" />
+                Watch
+              </a>
+            </div>
+          </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+const WATCH_LINKS = [
+  { label: "FIFA+",      url: "https://www.fifa.com/fifaplus/en/tournaments/mens/worldcup/canadamexicousa2026", note: "Free · Global" },
+  { label: "Fox Sports", url: "https://www.foxsports.com/soccer/fifa-world-cup",                               note: "USA · English" },
+  { label: "Peacock",    url: "https://www.peacocktv.com",                                                     note: "USA · Streaming" },
+  { label: "Telemundo",  url: "https://www.telemundo.com/en-vivo",                                             note: "USA · Spanish" },
+  { label: "CTV",        url: "https://www.ctv.ca/live",                                                       note: "Canada" },
+  { label: "TSN",        url: "https://www.tsn.ca/watch",                                                      note: "Canada" },
+  { label: "TV Azteca",  url: "https://aztecadeportes.com/en-vivo",                                            note: "Mexico" },
+];
+
+export function WhereToWatch() {
+  return (
+    <section className="rounded-[24px] border border-[#10131a]/10 bg-white p-5 shadow-sm">
+      <div className="flex items-center gap-2">
+        <Tv className="size-4 text-cobalt" />
+        <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[#10131a]/70">
+          Where to watch
+        </h2>
+        <span className="ml-auto flex items-center gap-1.5 rounded-full bg-coral/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-coral">
+          <Radio className="size-3" />
+          Live now
+        </span>
+      </div>
+      <ul className="mt-4 space-y-1">
+        {WATCH_LINKS.map((s) => (
+          <li key={s.label}>
+            <a
+              href={s.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between rounded-xl px-3 py-2.5 transition hover:bg-cobalt/5"
+            >
+              <div>
+                <p className="text-sm font-black text-[#10131a]">{s.label}</p>
+                <p className="text-xs font-bold text-[#10131a]/45">{s.note}</p>
+              </div>
+              <ArrowUpRight className="size-4 shrink-0 text-cobalt" />
+            </a>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
