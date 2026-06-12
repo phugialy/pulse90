@@ -209,11 +209,14 @@ async function processFixture(
   // ------------------------------------------------------------------
   const homeTeam = typedTeams.find((t) => t.id === fixture.home_team_id);
   const awayTeam = typedTeams.find((t) => t.id === fixture.away_team_id);
-  const homeRank = homeTeam?.current_rank ?? 50;
-  const awayRank = awayTeam?.current_rank ?? 50;
-  const rankDiff = awayRank - homeRank;
-  // k=0.015: 50-rank gap → ~68% favourite; 100-rank gap → ~78%
-  const pHome = 1 / (1 + Math.exp(-0.015 * rankDiff));
+  const homeRankRaw = homeTeam?.current_rank;
+  const awayRankRaw = awayTeam?.current_rank;
+  // When both ranks are missing, apply slight home-team edge (WC listed-first advantage).
+  // When one or both are set, use the logistic ranking model.
+  const pHome =
+    homeRankRaw == null && awayRankRaw == null
+      ? 0.55
+      : 1 / (1 + Math.exp(-0.015 * ((awayRankRaw ?? 50) - (homeRankRaw ?? 50))));
   const winnerTeam = pHome >= 0.5 ? homeTeam : awayTeam;
   const winnerProb = pHome >= 0.5 ? pHome : 1 - pHome;
 
