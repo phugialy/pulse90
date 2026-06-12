@@ -74,7 +74,7 @@ export default async function MatchPage({
               <StatusPill icon={Trophy}>{formatStage(match.stage)}</StatusPill>
               <StatusPill icon={MapPin}>{match.venue}</StatusPill>
               <StatusPill icon={MapPin}>{match.place}</StatusPill>
-              {predictions.matchWinner && match.status === "scheduled" && (
+              {predictions.matchWinner && match.status !== "completed" && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-cobalt/20 bg-cobalt/8 px-3 py-1 text-xs font-black text-cobalt">
                   <Sparkles className="size-3" />
                   Our call: {predictions.matchWinner}
@@ -127,7 +127,7 @@ export default async function MatchPage({
               {match.reason}
             </p>
           </section>
-          {(predictions.goalScorers.length > 0 || predictions.cardWatch.length > 0) && (
+          {(predictions.matchWinner || predictions.goalScorers.length > 0 || predictions.cardWatch.length > 0) && (
             <MatchPredictionsPanel events={events} predictions={predictions} status={match.status} />
           )}
         </aside>
@@ -292,6 +292,12 @@ function MatchPredictionsPanel({
       <p className="text-xs font-black uppercase tracking-[0.2em] text-[#10131a]/60">
         Pre-match predictions
       </p>
+      {predictions.matchWinner && (
+        <div className="mt-3 flex items-center gap-2 rounded-xl bg-cobalt/8 px-3 py-2">
+          <Sparkles className="size-3.5 shrink-0 text-cobalt" />
+          <p className="text-xs font-black text-cobalt">Our call: {predictions.matchWinner}</p>
+        </div>
+      )}
       <div className="mt-4 grid grid-cols-2 gap-4">
         {predictions.goalScorers.length > 0 && (
           <div>

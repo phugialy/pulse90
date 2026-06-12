@@ -1136,8 +1136,7 @@ export async function getPredictionsHub() {
     supabase
       .from("fixture_cards_view")
       .select("*")
-      .eq("status", "scheduled")
-      .gte("starts_at", now.toISOString())
+      .in("status", ["scheduled", "live"])
       .lte("starts_at", weekAhead.toISOString())
       .order("starts_at", { ascending: true })
       .limit(6),
