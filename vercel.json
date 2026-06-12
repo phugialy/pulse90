@@ -3,6 +3,10 @@
     {
       "path": "/api/sync/scores",
       "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/sync/predictions",
+      "schedule": "0 */8 * * *"
     }
   ]
 }

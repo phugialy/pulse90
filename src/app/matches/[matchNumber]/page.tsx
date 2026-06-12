@@ -8,6 +8,7 @@ import {
   getMatchCenter,
   type MatchCenterGroupRow,
   type MatchEvent,
+  type MatchPredictions,
 } from "@/lib/pulse90-data";
 import { CalendarDays, Clock3, MapPin, Trophy } from "lucide-react";
 
@@ -19,7 +20,7 @@ export default async function MatchPage({
   params: Promise<{ matchNumber: string }>;
 }) {
   const { matchNumber } = await params;
-  const { awayTeam, awayTeamId, events, fixtureId, groupTable, homeTeam, homeTeamId, match, voteTally } =
+  const { awayTeam, awayTeamId, events, fixtureId, groupTable, homeTeam, homeTeamId, match, predictions, voteTally } =
     await getMatchCenter(matchNumber);
 
   if (!match) {
@@ -119,6 +120,9 @@ export default async function MatchPage({
               {match.reason}
             </p>
           </section>
+          {(predictions.goalScorers.length > 0 || predictions.cardWatch.length > 0) && (
+            <MatchPredictionsPanel predictions={predictions} />
+          )}
         </aside>
       </div>
     </AppShell>
@@ -240,6 +244,48 @@ function GroupTable({ group, rows }: { group: string; rows: MatchCenterGroupRow[
 
 function formatStage(stage: string) {
   return stage === "group" ? "Group stage" : stage;
+}
+
+function MatchPredictionsPanel({ predictions }: { predictions: MatchPredictions }) {
+  return (
+    <section className="rounded-[24px] border border-[#10131a]/10 bg-white p-5 shadow-sm">
+      <p className="text-xs font-black uppercase tracking-[0.2em] text-[#10131a]/60">
+        Pre-match predictions
+      </p>
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        {predictions.goalScorers.length > 0 && (
+          <div>
+            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-cobalt">
+              Likely to score
+            </p>
+            <ol className="space-y-1">
+              {predictions.goalScorers.map((p, i) => (
+                <li key={i} className="flex items-center gap-2 text-xs font-bold text-[#10131a]">
+                  <span className="w-3 shrink-0 text-[#10131a]/35">{i + 1}.</span>
+                  {p.label}
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+        {predictions.cardWatch.length > 0 && (
+          <div>
+            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-600">
+              Card watch
+            </p>
+            <ol className="space-y-1">
+              {predictions.cardWatch.map((p, i) => (
+                <li key={i} className="flex items-center gap-2 text-xs font-bold text-[#10131a]">
+                  <span className="w-3 shrink-0 text-[#10131a]/35">{i + 1}.</span>
+                  {p.label}
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 function eventIcon(eventType: string) {

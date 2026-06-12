@@ -219,6 +219,15 @@ export type VoteTally = {
   total: number;
 };
 
+export type PlayerPrediction = {
+  label: string;
+};
+
+export type MatchPredictions = {
+  goalScorers: PlayerPrediction[];
+  cardWatch: PlayerPrediction[];
+};
+
 type MatchCenterTeamRow = {
   id: string;
   slug: string;
@@ -861,6 +870,7 @@ export async function getMatchCenter(matchNumber: string) {
   const supabase = getSupabaseReadClient();
 
   const emptyTally: VoteTally = { homeVotes: 0, drawVotes: 0, awayVotes: 0, total: 0 };
+  const emptyPredictions: MatchPredictions = { goalScorers: [], cardWatch: [] };
   const emptyCenter = {
     awayTeam: null,
     awayTeamId: null,
@@ -869,6 +879,7 @@ export async function getMatchCenter(matchNumber: string) {
     groupTable: [] as MatchCenterGroupRow[],
     homeTeam: null,
     homeTeamId: null,
+    predictions: emptyPredictions,
     voteTally: emptyTally,
   };
 
@@ -890,7 +901,7 @@ export async function getMatchCenter(matchNumber: string) {
   const teamSlugs = [fixture.home_team_slug, fixture.away_team_slug].filter(
     (slug): slug is string => Boolean(slug),
   );
-  const [teamsResult, groupResult, eventsResult] = await Promise.all([
+  const [teamsResult, groupResult, eventsResult, predictionsResult] = await Promise.all([
     supabase
       .from("teams")
       .select("id, slug, name, fifa_code, flag_emoji, flag_asset_url, group_code")
@@ -910,6 +921,12 @@ export async function getMatchCenter(matchNumber: string) {
       .eq("fixture_id", fixture.id)
       .order("minute", { ascending: true, nullsFirst: false })
       .order("importance", { ascending: false }),
+    supabase
+      .from("predictions")
+      .select("prediction_type, label, probability")
+      .eq("fixture_id", fixture.id)
+      .in("prediction_type", ["player_goal", "player_card"])
+      .order("probability", { ascending: false }),
   ]);
   const teamRows = teamsResult.error ? [] : (teamsResult.data as MatchCenterTeamRow[]);
   const teamFlags = new Map(
@@ -962,6 +979,19 @@ export async function getMatchCenter(matchNumber: string) {
         importance: row.importance,
       }));
 
+  type PredictionPlayerRow = { prediction_type: string; label: string; probability: number };
+  const predRows = (predictionsResult.data ?? []) as PredictionPlayerRow[];
+  const matchPredictions: MatchPredictions = {
+    goalScorers: predRows
+      .filter((r) => r.prediction_type === "player_goal")
+      .slice(0, 5)
+      .map((r) => ({ label: r.label })),
+    cardWatch: predRows
+      .filter((r) => r.prediction_type === "player_card")
+      .slice(0, 5)
+      .map((r) => ({ label: r.label })),
+  };
+
   return {
     awayTeam,
     awayTeamId: awayTeamRow?.id ?? null,
@@ -971,6 +1001,7 @@ export async function getMatchCenter(matchNumber: string) {
     homeTeam,
     homeTeamId: homeTeamRow?.id ?? null,
     match: mapFixture(fixture, teamFlags),
+    predictions: matchPredictions,
     voteTally,
   };
 }
