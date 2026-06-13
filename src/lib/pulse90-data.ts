@@ -672,14 +672,22 @@ export async function getTodayDashboard() {
     return fallbackToday();
   }
 
-  const [fixturesResult, predictionsResult, teamFlags, groupProjectionResult, matchWinnerResult] =
+  const [fixturesResult, completedResult, predictionsResult, teamFlags, groupProjectionResult, matchWinnerResult] =
     await Promise.all([
+      // Upcoming + live only — no completed mixed in
       supabase
         .from("fixture_cards_view")
         .select("*")
-        .in("status", ["scheduled", "live", "completed"])
+        .in("status", ["scheduled", "live"])
         .order("starts_at", { ascending: true })
         .limit(20),
+      // Completed separately, newest first, capped at 8 for the ribbon
+      supabase
+        .from("fixture_cards_view")
+        .select("*")
+        .eq("status", "completed")
+        .order("starts_at", { ascending: false })
+        .limit(8),
       supabase
         .from("predictions")
         .select("*")
@@ -706,9 +714,11 @@ export async function getTodayDashboard() {
   const rawRows = fixturesResult.data as FixtureCardRow[];
   const allMapped = rawRows.map((row) => mapFixture(row, teamFlags));
 
-  const results = allMapped.filter((m) => m.status === "completed").reverse();
+  const results = (completedResult.data ?? []).map((row) =>
+    mapFixture(row as FixtureCardRow, teamFlags),
+  );
   const mappedLive = allMapped.filter((m) => m.status === "live");
-  const upcoming = allMapped.filter((m) => m.status !== "completed");
+  const upcoming = allMapped;
 
   // Tomorrow's watch windows: first 4 scheduled fixtures that start after today (UTC)
   const endOfTodayUtc = new Date();
