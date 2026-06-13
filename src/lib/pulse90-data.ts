@@ -1234,11 +1234,14 @@ export async function getPredictionsHub() {
   }
 
   type GoalEventRow = { title: string; event_type: string; team_id: string | null };
+  // title field stores "Player Name 31'" or "Player Name 45+5'" — strip the minute suffix
+  const stripMinute = (s: string) => s.replace(/\s+\d+(\+\d+)?'$/, "").trim();
   const goalData: Record<string, { goals: number; teamId: string | null }> = {};
   for (const ev of (goldenBootResult.data ?? []) as GoalEventRow[]) {
     if (!ev.title) continue;
-    if (!goalData[ev.title]) goalData[ev.title] = { goals: 0, teamId: ev.team_id };
-    goalData[ev.title].goals++;
+    const name = stripMinute(ev.title);
+    if (!goalData[name]) goalData[name] = { goals: 0, teamId: ev.team_id };
+    goalData[name].goals++;
   }
   const goldenBoot: GoldenBootEntry[] = Object.entries(goalData)
     .map(([name, { goals, teamId }]) => {
