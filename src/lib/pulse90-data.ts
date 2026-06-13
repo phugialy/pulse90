@@ -232,6 +232,8 @@ export type MatchPredictions = {
 export type GoldenBootEntry = {
   name: string;
   goals: number;
+  flagEmoji?: string;
+  flagAssetUrl?: string | null;
 };
 
 export type UpcomingMatchPrediction = {
@@ -1207,7 +1209,7 @@ export async function getPredictionsHub() {
   const [goldenBootResult, upcomingFixturesResult, teamFlags, editorialResult] = await Promise.all([
     supabase
       .from("match_events")
-      .select("title, event_type")
+      .select("title, event_type, team_id")
       .in("event_type", ["goal", "penalty_goal"]),
     supabase
       .from("fixture_cards_view")
@@ -1226,15 +1228,25 @@ export async function getPredictionsHub() {
   ]);
 
   // Golden boot: aggregate goal events by player name
-  type GoalEventRow = { title: string; event_type: string };
-  const goalCounts: Record<string, number> = {};
-  for (const ev of (goldenBootResult.data ?? []) as GoalEventRow[]) {
-    if (ev.title) goalCounts[ev.title] = (goalCounts[ev.title] ?? 0) + 1;
+  const teamIdToFlag = new Map<string, { emoji: string; assetUrl: string | null }>();
+  for (const [, flag] of teamFlags) {
+    teamIdToFlag.set(flag.id, { emoji: flag.emoji, assetUrl: flag.assetUrl });
   }
-  const goldenBoot: GoldenBootEntry[] = Object.entries(goalCounts)
-    .map(([name, goals]) => ({ name, goals }))
+
+  type GoalEventRow = { title: string; event_type: string; team_id: string | null };
+  const goalData: Record<string, { goals: number; teamId: string | null }> = {};
+  for (const ev of (goldenBootResult.data ?? []) as GoalEventRow[]) {
+    if (!ev.title) continue;
+    if (!goalData[ev.title]) goalData[ev.title] = { goals: 0, teamId: ev.team_id };
+    goalData[ev.title].goals++;
+  }
+  const goldenBoot: GoldenBootEntry[] = Object.entries(goalData)
+    .map(([name, { goals, teamId }]) => {
+      const flag = teamId ? teamIdToFlag.get(teamId) : undefined;
+      return { name, goals, flagEmoji: flag?.emoji, flagAssetUrl: flag?.assetUrl ?? null };
+    })
     .sort((a, b) => b.goals - a.goals)
-    .slice(0, 10);
+    .slice(0, 20);
 
   // Upcoming match predictions
   const upcomingFixtureRows = (upcomingFixturesResult.data ?? []) as FixtureCardRow[];

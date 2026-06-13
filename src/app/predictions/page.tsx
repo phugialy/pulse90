@@ -51,30 +51,42 @@ export default async function PredictionsPage() {
           </div>
           {goldenBoot.length > 0 ? (
             <div className="mt-4 overflow-hidden rounded-[24px] border border-[#10131a]/10 bg-white shadow-sm">
-              {goldenBoot.map((entry, i) => (
-                <div
-                  key={entry.name}
-                  className="grid grid-cols-[28px_1fr_auto] items-center gap-4 border-b border-[#10131a]/6 px-5 py-3 last:border-0"
-                >
-                  <span
-                    className={`text-sm font-black tabular-nums ${
-                      i === 0
-                        ? "text-amber-500"
-                        : i === 1
-                          ? "text-[#10131a]/55"
-                          : i === 2
-                            ? "text-amber-700/70"
-                            : "text-[#10131a]/35"
-                    }`}
+              <div className="max-h-[440px] overflow-y-auto">
+                {goldenBoot.map((entry, i) => (
+                  <div
+                    key={entry.name}
+                    className="grid grid-cols-[28px_auto_1fr_auto] items-center gap-3 border-b border-[#10131a]/6 px-5 py-3 last:border-0"
                   >
-                    {i + 1}
-                  </span>
-                  <span className="font-black text-[#10131a]">{entry.name}</span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-sm font-black text-amber-700">
-                    ⚽ {entry.goals}
-                  </span>
-                </div>
-              ))}
+                    <span
+                      className={`text-sm font-black tabular-nums ${
+                        i === 0
+                          ? "text-amber-500"
+                          : i === 1
+                            ? "text-[#10131a]/55"
+                            : i === 2
+                              ? "text-amber-700/70"
+                              : "text-[#10131a]/35"
+                      }`}
+                    >
+                      {i + 1}
+                    </span>
+                    {entry.flagAssetUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        alt=""
+                        className="h-4 w-[22px] shrink-0 rounded-[2px] object-cover shadow-sm ring-1 ring-[#10131a]/10"
+                        src={entry.flagAssetUrl}
+                      />
+                    ) : (
+                      <span className="text-sm leading-none">{entry.flagEmoji ?? "🏳"}</span>
+                    )}
+                    <span className="truncate font-black text-[#10131a]">{entry.name}</span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-sm font-black text-amber-700">
+                      ⚽ {entry.goals}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="mt-4 rounded-[24px] border border-[#10131a]/10 bg-white p-6 shadow-sm">
