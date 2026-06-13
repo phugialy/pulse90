@@ -875,6 +875,67 @@ export async function getFixtureExplorer() {
   return { upcoming, results };
 }
 
+export async function getResultsPage(): Promise<ResultMatch[]> {
+  const supabase = getSupabaseReadClient();
+  if (!supabase) return [];
+
+  const [result, teamFlags] = await Promise.all([
+    supabase
+      .from("fixture_cards_view")
+      .select("*")
+      .eq("status", "completed")
+      .order("starts_at", { ascending: false })
+      .limit(64),
+    getFixtureTeamFlags(),
+  ]);
+
+  if (result.error || !result.data?.length) return [];
+
+  const completedRows = (result.data as FixtureCardRow[]).filter(
+    (r) => r.home_score !== null && r.away_score !== null,
+  );
+
+  const ids = completedRows.map((r) => r.id);
+  const eventsResult = await supabase
+    .from("match_events")
+    .select("fixture_id, event_type, minute, title")
+    .in("fixture_id", ids)
+    .in("event_type", ["goal", "penalty_goal", "own_goal"])
+    .order("minute", { ascending: true, nullsFirst: false });
+
+  type GoalEventRow = { fixture_id: string; event_type: string; minute: number | null; title: string };
+  const goalsByFixture = new Map<string, GoalEventRow[]>();
+  for (const ev of ((eventsResult.data ?? []) as GoalEventRow[])) {
+    const arr = goalsByFixture.get(ev.fixture_id) ?? [];
+    arr.push(ev);
+    goalsByFixture.set(ev.fixture_id, arr);
+  }
+
+  return completedRows.map((row) => {
+    const homeFlag = row.home_team_slug ? teamFlags.get(row.home_team_slug) : undefined;
+    const awayFlag = row.away_team_slug ? teamFlags.get(row.away_team_slug) : undefined;
+    return {
+      matchNumber: row.match_number,
+      fixtureId: row.id,
+      home: row.home_team ?? "TBD",
+      homeFlagEmoji: homeFlag?.emoji,
+      homeFlagAssetUrl: homeFlag?.assetUrl ?? null,
+      homeScore: row.home_score!,
+      away: row.away_team ?? "TBD",
+      awayFlagEmoji: awayFlag?.emoji,
+      awayFlagAssetUrl: awayFlag?.assetUrl ?? null,
+      awayScore: row.away_score!,
+      group: row.group_code ? `Group ${row.group_code}` : row.stage,
+      date: formatMatchDate(row.starts_at),
+      goals: (goalsByFixture.get(row.id) ?? []).map((ev) => ({
+        scorer: ev.title.replace(/\s+\d+(\+\d+)?'$/, "").trim(),
+        minute: ev.minute,
+        eventType: ev.event_type,
+      })),
+    };
+  });
+}
+
 export async function getTomorrowPlan() {
   const { upcoming } = await getFixtureExplorer();
 

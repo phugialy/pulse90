@@ -93,6 +93,24 @@ export function PageIntro({
   );
 }
 
+function HeroFlag({ src, emoji, name }: { src?: string | null; emoji?: string; name: string }) {
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        alt={`${name} flag`}
+        className="h-16 w-24 rounded-xl object-cover shadow-lg ring-1 ring-white/10 sm:h-20 sm:w-28"
+        src={src}
+      />
+    );
+  }
+  return (
+    <span className="flex h-16 w-24 items-center justify-center rounded-xl bg-white/8 text-5xl sm:h-20 sm:w-28">
+      {emoji ?? "🏳"}
+    </span>
+  );
+}
+
 export function PriorityMatch({
   match = liveMatches[0],
   matchWinner = null,
@@ -101,93 +119,105 @@ export function PriorityMatch({
   matchWinner?: string | null;
 }) {
   const isLive = match.status === "live";
-  const centerText = match.score ?? "vs";
 
   return (
-    <section className="relative overflow-hidden rounded-[28px] border border-[#10131a]/10 bg-white p-5 shadow-[0_24px_70px_rgba(25,45,88,0.12)] sm:p-7">
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-lime-300 via-cobalt to-coral" />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <StatusPill icon={isLive ? Radio : Clock3}>
-          {isLive ? "Live command pick" : "Next priority match"}
-        </StatusPill>
-        <span className="rounded-full bg-lime-300 px-3 py-1 text-xs font-black text-black">
-          {match.heat} heat
-        </span>
+    <section className="overflow-hidden rounded-[28px] bg-[#10131a] text-white shadow-[0_24px_70px_rgba(16,19,26,0.22)]">
+      {/* Top bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-6">
+        <div className="flex items-center gap-2">
+          {isLive && (
+            <span className="flex size-2 shrink-0 rounded-full bg-red-400 shadow-[0_0_6px_2px_rgba(248,113,113,0.5)]" />
+          )}
+          <span className="text-xs font-black uppercase tracking-[0.22em] text-white/50">
+            {isLive ? "Live command pick" : "Next priority match"}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-white/8 px-3 py-1 text-xs font-black text-white/55">
+            {match.group}
+          </span>
+          <span className="rounded-full bg-lime-300 px-3 py-1 text-xs font-black text-black">
+            {match.heat} heat
+          </span>
+        </div>
       </div>
 
-      <div className="mt-7 grid gap-6 xl:grid-cols-[1fr_240px] xl:items-end">
-        <div>
-          <div className="mb-3 flex items-center gap-2">
-            <FlagImg src={match.homeFlagAssetUrl} emoji={match.homeFlagEmoji} alt={match.home} />
-            <FlagImg src={match.awayFlagAssetUrl} emoji={match.awayFlagEmoji} alt={match.away} />
-          </div>
-          <p className="text-sm font-bold uppercase tracking-[0.22em] text-cobalt">
-            {match.reason}
-          </p>
-          <div className="mt-4 flex flex-wrap items-end gap-x-4 gap-y-2">
-            <h2 className="text-5xl font-black leading-none tracking-tight text-[#10131a] sm:text-6xl">
-              {match.home}
-            </h2>
-            <span className="pb-2 text-4xl font-black tabular-nums text-cobalt sm:text-5xl">
-              {centerText}
-            </span>
-            <h2 className="text-5xl font-black leading-none tracking-tight text-[#10131a] sm:text-6xl">
-              {match.away}
-            </h2>
-          </div>
-          <div className="mt-5 flex flex-wrap gap-2">
-            {match.date ? (
-              <StatusPill icon={CalendarDays}>{match.date}</StatusPill>
-            ) : null}
-            <StatusPill icon={Clock3}>{match.minute ?? match.time}</StatusPill>
-            <StatusPill icon={Trophy}>{match.group}</StatusPill>
-            <StatusPill icon={MapPin}>{match.place}</StatusPill>
-          </div>
+      {/* Teams + score */}
+      <div className="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-6">
+        <div className="flex flex-col items-center gap-3">
+          <HeroFlag src={match.homeFlagAssetUrl} emoji={match.homeFlagEmoji} name={match.home} />
+          <span className="text-center text-lg font-black leading-tight tracking-tight text-white sm:text-xl">
+            {match.home}
+          </span>
         </div>
+        <span className="text-4xl font-black tabular-nums text-cobalt sm:text-5xl">
+          {match.score ?? "vs"}
+        </span>
+        <div className="flex flex-col items-center gap-3">
+          <HeroFlag src={match.awayFlagAssetUrl} emoji={match.awayFlagEmoji} name={match.away} />
+          <span className="text-center text-lg font-black leading-tight tracking-tight text-white sm:text-xl">
+            {match.away}
+          </span>
+        </div>
+      </div>
 
-        <div className="rounded-2xl border border-[#10131a]/10 bg-stadium p-4">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#10131a]/45">
-            Why this one
-          </p>
-          <p className="mt-3 text-lg font-bold leading-snug text-[#10131a]">
-            {match.stakes}
-          </p>
-          <div className="mt-4 rounded-2xl bg-white p-3 text-sm font-bold leading-6 text-[#10131a]/68">
-            <p>
-              {match.date ? `${match.date} at ` : ""}
-              {match.time}
-            </p>
-            <p>{match.venue}</p>
-            <p>{match.place}</p>
-          </div>
-          {matchWinner && (
-            <div className="mt-3 flex items-center gap-2 rounded-xl bg-cobalt px-3 py-2.5">
-              <Sparkles className="size-4 shrink-0 text-white/70" />
-              <p className="text-sm font-black text-white">
-                Our call: {matchWinner}
-              </p>
-            </div>
+      {/* Context */}
+      <div className="mt-5 px-6">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-cobalt">
+          {match.reason}
+        </p>
+        <p className="mt-2 text-sm font-bold leading-snug text-white/60">
+          {match.stakes}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {match.date && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-xs font-bold text-white/55">
+              <CalendarDays className="size-3.5" />
+              {match.date}
+            </span>
           )}
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Link
-              className="inline-flex h-10 items-center gap-2 rounded-full bg-[#10131a] px-4 text-sm font-black text-white transition hover:bg-cobalt"
-              href={`/matches/${match.matchNumber}`}
-            >
-              Match center
-              <ArrowUpRight className="size-4" />
-            </Link>
-            {isLive && (
-              <a
-                className="inline-flex h-10 items-center gap-2 rounded-full border border-cobalt/30 bg-cobalt/8 px-4 text-sm font-black text-cobalt transition hover:bg-cobalt hover:text-white"
-                href="https://www.fifa.com/fifaplus/en/tournaments/mens/worldcup/canadamexicousa2026"
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                <Tv className="size-4" />
-                Watch live
-              </a>
-            )}
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-xs font-bold text-white/55">
+            <Clock3 className="size-3.5" />
+            {match.minute ?? match.time}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-xs font-bold text-white/55">
+            <MapPin className="size-3.5" />
+            {match.place}
+          </span>
+        </div>
+      </div>
+
+      {/* Bottom bar */}
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/8 px-6 py-4">
+        {matchWinner ? (
+          <div className="flex items-center gap-2">
+            <Sparkles className="size-4 shrink-0 text-cobalt" />
+            <span className="text-sm font-black text-white">
+              Our call: <span className="text-cobalt">{matchWinner}</span>
+            </span>
           </div>
+        ) : (
+          <span className="text-xs font-bold text-white/30">Prediction pending</span>
+        )}
+        <div className="flex gap-2">
+          <Link
+            className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-4 text-sm font-black text-[#10131a] transition hover:bg-lime-300"
+            href={`/matches/${match.matchNumber}`}
+          >
+            Match center
+            <ArrowUpRight className="size-4" />
+          </Link>
+          {isLive && (
+            <a
+              className="inline-flex h-9 items-center gap-2 rounded-full bg-cobalt px-4 text-sm font-black text-white transition hover:bg-cobalt/80"
+              href="https://www.fifa.com/fifaplus/en/tournaments/mens/worldcup/canadamexicousa2026"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              <Tv className="size-4" />
+              Watch live
+            </a>
+          )}
         </div>
       </div>
     </section>
@@ -481,7 +511,7 @@ export function WatchFlow({
   const scheduledMatches = matches.filter((match) => match.status !== "live");
 
   return (
-    <section className="min-w-0 rounded-[24px] border border-[#10131a]/10 bg-[#f8faf4]/90 p-4 shadow-sm sm:p-5">
+    <section className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Flame className="size-4 text-cobalt" />
@@ -494,11 +524,11 @@ export function WatchFlow({
         </span>
       </div>
 
-      <div className="-mx-4 mt-5 flex snap-x gap-3 overflow-x-auto px-4 pb-3 sm:-mx-5 sm:px-5">
+      <div className="-mx-4 mt-4 flex snap-x gap-3 overflow-x-auto px-4 pb-3 sm:-mx-6 sm:px-6">
         {scheduledMatches.slice(0, 8).map((match, index) => (
           <Link
             aria-label={`Open ${match.home} vs ${match.away} match center`}
-            className="group flex min-h-[270px] w-[248px] shrink-0 snap-start flex-col rounded-[22px] border border-[#10131a]/10 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-cobalt/45 sm:w-[272px]"
+            className="group flex min-h-[260px] w-[248px] shrink-0 snap-start flex-col rounded-[22px] border border-[#10131a]/10 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-cobalt/45 sm:w-[272px]"
             href={`/matches/${match.matchNumber}`}
             key={match.matchNumber}
           >
@@ -523,23 +553,12 @@ export function WatchFlow({
               {match.home} vs {match.away}
             </h3>
 
-            <div className="mt-3 text-xs font-bold text-[#10131a]/55">
-              <p>
-                {match.group} / {match.place}
-              </p>
+            <div className="mt-2 flex items-center gap-1.5 text-xs font-bold text-[#10131a]/50">
+              <MapPin className="size-3 shrink-0 text-cobalt" />
+              {match.venue}, {match.place}
             </div>
 
-            <div className="mt-3 rounded-2xl bg-stadium p-3 text-sm font-bold leading-5 text-[#10131a]/70">
-              <div className="flex items-start gap-2">
-                <MapPin className="mt-0.5 size-4 shrink-0 text-cobalt" />
-                <div>
-                  <p className="text-[#10131a]">{match.venue}</p>
-                  <p>{match.place}</p>
-                </div>
-              </div>
-            </div>
-
-            <p className="mt-3 line-clamp-2 text-sm font-bold leading-6 text-[#10131a]/74">
+            <p className="mt-3 line-clamp-3 text-sm font-bold leading-6 text-[#10131a]/68">
               {match.stakes}
             </p>
 
@@ -551,25 +570,32 @@ export function WatchFlow({
         ))}
       </div>
 
-      <div className="mt-1 flex gap-3 overflow-x-auto pb-1">
-        {items.slice(0, 4).map((item) => (
-          <article
-            className="min-w-[220px] rounded-2xl bg-stadium px-4 py-3"
-            key={item.slot}
-          >
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-cobalt">
-              {item.slot}
-            </p>
-            <h4 className="mt-1 truncate font-black text-[#10131a]">
-              {item.match}
-            </h4>
-            <p className="mt-1 text-sm font-bold text-[#10131a]/48">
-              {"date" in item && item.date ? `${item.date} / ` : ""}
-              {item.time}
-            </p>
-          </article>
-        ))}
-      </div>
+      {items.length > 0 && (
+        <div className="mt-3">
+          <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-[#10131a]/38">
+            On deck tomorrow
+          </p>
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6">
+            {items.slice(0, 5).map((item) => (
+              <article
+                className="shrink-0 min-w-[170px] rounded-xl border border-[#10131a]/8 px-3 py-2.5"
+                key={item.slot}
+              >
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-cobalt">
+                  {item.slot}
+                </p>
+                <p className="mt-0.5 truncate text-sm font-black text-[#10131a]">
+                  {item.match}
+                </p>
+                <p className="mt-0.5 text-xs font-bold text-[#10131a]/42">
+                  {"date" in item && item.date ? `${item.date} · ` : ""}
+                  {item.time}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -658,20 +684,23 @@ export function ResultsRibbon({ matches }: { matches: Match[] }) {
   if (!matches.length) return null;
 
   return (
-    <section className="rounded-[24px] border border-[#10131a]/10 bg-white shadow-sm p-4">
+    <section>
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BadgeCheck className="size-4 text-cobalt" />
           <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[#10131a]/70">
-            Today&apos;s results
+            Results
           </h2>
         </div>
-        <span className="text-xs font-bold text-[#10131a]/45">
-          {matches.length} finished
-        </span>
+        <Link
+          href="/results"
+          className="text-xs font-black text-cobalt hover:underline"
+        >
+          View all →
+        </Link>
       </div>
 
-      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:-mx-5 sm:px-5">
+      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6">
         {matches.map((match) => {
           const s = parseScore(match.score);
           const homeWon = s ? s.home > s.away : false;
@@ -681,29 +710,27 @@ export function ResultsRibbon({ matches }: { matches: Match[] }) {
             <Link
               key={match.matchNumber}
               href={`/matches/${match.matchNumber}`}
-              className="group flex shrink-0 flex-col gap-2 rounded-2xl border border-[#10131a]/10 bg-stadium px-4 py-3 transition hover:border-cobalt/40 hover:shadow-sm min-w-[220px]"
+              className="group flex w-[190px] shrink-0 flex-col gap-2 rounded-2xl border border-[#10131a]/10 bg-white px-4 py-3 shadow-sm transition hover:border-cobalt/40"
             >
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-black uppercase tracking-wider text-[#10131a]/40">
                   {match.group}
                 </span>
-                <span className="rounded-full bg-[#10131a]/6 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-[#10131a]/45">
+                <span className="rounded-full bg-[#10131a]/6 px-2 py-0.5 text-[10px] font-black uppercase text-[#10131a]/45">
                   FT
                 </span>
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className={`flex min-w-0 flex-1 items-center gap-1.5 text-sm font-black ${homeWon ? "text-[#10131a]" : awayWon ? "text-[#10131a]/30" : "text-[#10131a]/70"}`}>
+              <div className="flex items-center gap-2">
+                <span className={`flex min-w-0 flex-1 items-center gap-1.5 text-xs font-black ${homeWon ? "text-[#10131a]" : awayWon ? "text-[#10131a]/28" : "text-[#10131a]/65"}`}>
                   <FlagImg src={match.homeFlagAssetUrl} emoji={match.homeFlagEmoji} alt={match.home} />
                   <span className="truncate">{match.home}</span>
                 </span>
-
-                <span className="shrink-0 text-xl font-black tabular-nums text-cobalt">
+                <span className="shrink-0 text-base font-black tabular-nums text-cobalt">
                   {match.score}
                 </span>
-
-                <span className={`flex min-w-0 flex-1 items-center justify-end gap-1.5 text-sm font-black ${awayWon ? "text-[#10131a]" : homeWon ? "text-[#10131a]/30" : "text-[#10131a]/70"}`}>
-                  <span className="truncate">{match.away}</span>
+                <span className={`flex min-w-0 flex-1 items-center justify-end gap-1.5 text-xs font-black ${awayWon ? "text-[#10131a]" : homeWon ? "text-[#10131a]/28" : "text-[#10131a]/65"}`}>
+                  <span className="truncate text-right">{match.away}</span>
                   <FlagImg src={match.awayFlagAssetUrl} emoji={match.awayFlagEmoji} alt={match.away} />
                 </span>
               </div>
