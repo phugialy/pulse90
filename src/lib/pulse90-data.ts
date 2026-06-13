@@ -845,7 +845,7 @@ export async function getFixtureExplorer() {
       goalsByFixture.set(ev.fixture_id, arr);
     }
 
-    results = completedRows.reverse().map((row) => {
+    results = completedRows.reverse().slice(0, 10).map((row) => {
       const homeFlag = row.home_team_slug ? teamFlags.get(row.home_team_slug) : undefined;
       const awayFlag = row.away_team_slug ? teamFlags.get(row.away_team_slug) : undefined;
       return {
