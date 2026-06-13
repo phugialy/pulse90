@@ -22,18 +22,18 @@ export function MatchTeamTabs({ homeTeam, awayTeam, events, homeTeamId, awayTeam
   const awayEvents = events.filter((e) => e.teamId === awayTeamId);
 
   return (
-    <section className="overflow-hidden rounded-[28px] border border-[#10131a]/10 bg-white shadow-sm">
-      <div className="border-b border-[#10131a]/8 px-5 py-4">
-        <p className="text-xs font-black uppercase tracking-[0.2em] text-[#10131a]/55">
-          Lineups &amp; team info
+    <section className="overflow-hidden rounded-[28px] border border-[#10131a]/10 bg-[#061f4a] shadow-sm">
+      <div className="border-b border-white/10 px-5 py-4">
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-[#f7d149]">
+          Lineups &amp; formations
         </p>
       </div>
-      <div className="grid divide-y divide-[#10131a]/8 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+      <div className="grid divide-y divide-white/8 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
         {homeTeam && (
-          <TeamPanel team={homeTeam} teamEvents={homeEvents} side="home" />
+          <TeamPanel team={homeTeam} teamEvents={homeEvents} />
         )}
         {awayTeam && (
-          <TeamPanel team={awayTeam} teamEvents={awayEvents} side="away" />
+          <TeamPanel team={awayTeam} teamEvents={awayEvents} />
         )}
       </div>
     </section>
@@ -45,56 +45,87 @@ export function MatchTeamTabs({ homeTeam, awayTeam, events, homeTeamId, awayTeam
 type TeamPanelProps = {
   team: MatchCenterTeam;
   teamEvents: MatchEvent[];
-  side: "home" | "away";
 };
 
-function TeamPanel({ team, teamEvents, side }: TeamPanelProps) {
+function TeamPanel({ team, teamEvents }: TeamPanelProps) {
   const [tab, setTab] = useState<"lineup" | "history">("lineup");
-  const theme = teamTheme(team.slug);
-  const hasLineup = Boolean(team.startingXi?.length && team.formation);
+  const hasStartingXi = Boolean(team.startingXi?.length);
+  const formationKey = team.formation ?? researchedFormationBySlug[team.slug] ?? "4-3-3";
+  const preset = formationPresets[formationKey] ?? formationPresets["4-3-3"];
+
+  const goalEvents = teamEvents.filter(
+    (e) => e.eventType === "goal" || e.eventType === "penalty_goal" || e.eventType === "own_goal",
+  );
+  const yellowEvents = teamEvents.filter((e) => e.eventType === "yellow_card");
+  const redEvents = teamEvents.filter((e) => e.eventType === "red_card");
+
+  // Build slots with player data
+  let slots: Array<FormationSlot & { player: SlotPlayer }>;
+  if (hasStartingXi && team.startingXi) {
+    // Map startingXi in order to preset slots (GK at end of preset, first in startingXi)
+    const ordered = [...preset.slots].reverse(); // GK first in reversed order
+    slots = team.startingXi.slice(0, ordered.length).map((name, i) => ({
+      ...ordered[i],
+      player: { name, shirtNumber: shirtFor(name, team.squad), positionCode: ordered[i].role },
+    }));
+  } else {
+    // Fall back: group squad by role, assign in order
+    const groups = groupSquad(team.squad);
+    const usedByRole: Record<FormationRole, number> = { DF: 0, FW: 0, GK: 0, MF: 0 };
+    slots = preset.slots
+      .map((slot) => {
+        const player = groups[slot.role][usedByRole[slot.role]];
+        usedByRole[slot.role] += 1;
+        if (!player) return null;
+        const sp: FormationSlot & { player: SlotPlayer } = {
+          ...slot,
+          player: { name: player.name, shirtNumber: player.shirtNumber, positionCode: player.positionCode },
+        };
+        return sp;
+      })
+      .filter((s): s is FormationSlot & { player: SlotPlayer } => s !== null);
+  }
+
+  const bench = hasStartingXi && team.startingXi
+    ? team.squad.filter((p) => !team.startingXi!.some((name) => name.toLowerCase() === p.name.toLowerCase()))
+    : team.squad.filter((_, i) => i >= 11);
 
   return (
-    <div className="flex flex-col p-5">
+    <div className="p-5">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-cobalt">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f7d149]">
             {team.group}
           </p>
-          <h3 className="mt-0.5 truncate text-xl font-black text-[#10131a]">{team.name}</h3>
-          {team.formation && (
-            <span
-              className="mt-1 inline-block rounded-full px-2.5 py-0.5 text-[11px] font-black text-white"
-              style={{ background: theme.dark }}
-            >
-              {team.formation}
-            </span>
-          )}
+          <h3 className="mt-0.5 text-xl font-black text-white">{team.name}</h3>
+          <p className="mt-1 text-sm font-bold text-white/55">
+            {hasStartingXi ? "Starting XI" : "Predicted"} · {preset.name}
+          </p>
         </div>
         <Link
-          className="shrink-0 rounded-full px-3 py-2 text-xs font-black text-white shadow-sm transition hover:opacity-80"
+          className="shrink-0 rounded-full border border-white/14 bg-white/8 px-3 py-2 text-xs font-black text-white/68 transition hover:bg-white/15"
           href={`/teams/${team.slug}`}
-          style={{ background: `linear-gradient(135deg, ${theme.dark}, ${theme.mid})` }}
         >
           Team page →
         </Link>
       </div>
 
       {/* Tabs */}
-      <div className="mt-4 flex rounded-full bg-[#10131a]/5 p-1 w-fit gap-1">
+      <div className="mt-4 flex rounded-full bg-white/8 p-1 w-fit gap-1">
         <button
           onClick={() => setTab("lineup")}
           className={`rounded-full px-3 py-1.5 text-xs font-black transition ${
-            tab === "lineup" ? "bg-[#10131a] text-white shadow-sm" : "text-[#10131a]/55 hover:text-[#10131a]"
+            tab === "lineup" ? "bg-white text-[#10131a] shadow-sm" : "text-white/55 hover:text-white"
           }`}
           type="button"
         >
-          {hasLineup ? "Formation" : "Squad"}
+          Formation
         </button>
         <button
           onClick={() => setTab("history")}
           className={`rounded-full px-3 py-1.5 text-xs font-black transition ${
-            tab === "history" ? "bg-[#10131a] text-white shadow-sm" : "text-[#10131a]/55 hover:text-[#10131a]"
+            tab === "history" ? "bg-white text-[#10131a] shadow-sm" : "text-white/55 hover:text-white"
           }`}
           type="button"
         >
@@ -103,19 +134,15 @@ function TeamPanel({ team, teamEvents, side }: TeamPanelProps) {
       </div>
 
       {/* Content */}
-      <div className="mt-4 flex-1">
+      <div className="mt-4">
         {tab === "lineup" ? (
-          hasLineup ? (
-            <FormationPitch
-              formation={team.formation!}
-              startingXi={team.startingXi!}
-              squad={team.squad}
-              teamEvents={teamEvents}
-              theme={theme}
-            />
-          ) : (
-            <SquadList squad={team.squad} teamEvents={teamEvents} theme={theme} />
-          )
+          <FormationView
+            slots={slots}
+            bench={bench}
+            goalEvents={goalEvents}
+            yellowEvents={yellowEvents}
+            redEvents={redEvents}
+          />
         ) : (
           <HistoryList history={team.history} />
         )}
@@ -124,222 +151,161 @@ function TeamPanel({ team, teamEvents, side }: TeamPanelProps) {
   );
 }
 
-// ─── formation pitch ──────────────────────────────────────────────────────────
+// ─── formation view (pitch + bench) ──────────────────────────────────────────
 
-function parseFormation(f: string): number[] {
-  // "4-3-3" → [1, 4, 3, 3]  (GK row prepended)
-  return [1, ...f.split("-").map(Number).filter((n) => !isNaN(n) && n > 0)];
-}
+type SlotPlayer = { name: string; shirtNumber?: number | null | undefined; positionCode: string };
 
-function stripMinute(s: string) {
-  return s.replace(/\s+\d+(\+\d+)?'$/, "").trim();
-}
-
-function matchesEvent(playerName: string, eventTitle: string) {
-  const p = playerName.toLowerCase();
-  const e = stripMinute(eventTitle).toLowerCase();
-  return (
-    p.includes(e) ||
-    e.includes(p) ||
-    p.split(" ").some((part) => part.length > 2 && e.includes(part))
-  );
-}
-
-type Theme = ReturnType<typeof teamTheme>;
-
-function FormationPitch({
-  formation,
-  startingXi,
-  squad,
-  teamEvents,
-  theme,
+function FormationView({
+  slots,
+  bench,
+  goalEvents,
+  yellowEvents,
+  redEvents,
 }: {
-  formation: string;
-  startingXi: string[];
-  squad: MatchCenterTeam["squad"];
-  teamEvents: MatchEvent[];
-  theme: Theme;
+  slots: Array<FormationSlot & { player: SlotPlayer }>;
+  bench: MatchCenterTeam["squad"];
+  goalEvents: MatchEvent[];
+  yellowEvents: MatchEvent[];
+  redEvents: MatchEvent[];
 }) {
-  const rows = parseFormation(formation);
-  const goalEvents = teamEvents.filter(
-    (e) => e.eventType === "goal" || e.eventType === "penalty_goal" || e.eventType === "own_goal",
-  );
-  const yellowEvents = teamEvents.filter((e) => e.eventType === "yellow_card");
-  const redEvents = teamEvents.filter((e) => e.eventType === "red_card");
-
-  // Assign starting XI to rows (GK first in startingXi)
-  let idx = 0;
-  const rowPlayers = rows.map((count) => {
-    const slice = startingXi.slice(idx, idx + count);
-    idx += count;
-    return slice;
-  });
-
-  // Find top scorer for highlight
-  const goalCounts = startingXi.map((name) =>
-    goalEvents.filter((e) => matchesEvent(name, e.title)).length,
-  );
-  const maxGoals = Math.max(0, ...goalCounts);
-
-  // Shirt number lookup from squad
-  const shirtMap = new Map(
-    squad.map((p) => [p.name.toLowerCase(), p.shirtNumber]),
-  );
-  function shirtFor(name: string) {
-    const exact = shirtMap.get(name.toLowerCase());
-    if (exact !== undefined) return exact;
-    // Partial match
-    for (const [key, num] of shirtMap) {
-      if (key.includes(name.toLowerCase()) || name.toLowerCase().includes(key.split(" ").slice(-1)[0])) {
-        return num;
-      }
-    }
-    return null;
-  }
-
   return (
-    <div
-      className="relative overflow-hidden rounded-2xl"
-      style={{ background: "linear-gradient(180deg, #1a4d2e 0%, #2a6b3f 50%, #1a4d2e 100%)" }}
-    >
-      {/* Pitch markings */}
-      <PitchMarkings />
-
-      {/* Player rows — rendered bottom-to-top (GK at bottom, forwards at top) */}
-      <div className="relative z-10 flex flex-col-reverse gap-1 px-3 py-5">
-        {rowPlayers.map((players, rowIdx) => (
-          <div key={rowIdx} className="flex items-center justify-around py-2">
-            {players.map((name, i) => {
-              const goals = goalEvents.filter((e) => matchesEvent(name, e.title)).length;
-              const yellow = yellowEvents.some((e) => matchesEvent(name, e.title));
-              const red = redEvents.some((e) => matchesEvent(name, e.title));
-              const isTop = maxGoals > 0 && goals === maxGoals;
-              const shirt = shirtFor(name);
-              const lastName = name.split(" ").slice(-1)[0];
-
-              return (
-                <div key={i} className="flex flex-col items-center gap-1" style={{ minWidth: 52 }}>
-                  <div className="relative">
-                    {/* Card badge top-left */}
-                    {(yellow || red) && (
-                      <span className="absolute -left-1 -top-1 z-10 text-[10px] leading-none">
-                        {red ? "🟥" : "🟨"}
-                      </span>
-                    )}
-                    {/* Goal badge top-right */}
-                    {goals > 0 && (
-                      <span className="absolute -right-1 -top-1 z-10 text-[10px] leading-none">
-                        {"⚽".repeat(Math.min(goals, 2))}
-                      </span>
-                    )}
-                    {/* Player circle */}
-                    <div
-                      className="flex size-10 items-center justify-center rounded-full text-xs font-black text-white shadow-md ring-2"
-                      style={{
-                        background: `linear-gradient(135deg, ${theme.dark}, ${theme.mid})`,
-                        outline: isTop ? "2px solid rgba(250,204,21,0.9)" : "2px solid rgba(255,255,255,0.3)",
-                      }}
-                    >
-                      {shirt ?? (rowIdx === 0 ? "GK" : "#")}
-                    </div>
-                  </div>
-                  <span className="max-w-[56px] truncate text-center text-[10px] font-black leading-none text-white drop-shadow">
-                    {lastName}
-                  </span>
-                </div>
-              );
-            })}
+    <div className="space-y-3">
+      <PitchMap slots={slots} goalEvents={goalEvents} yellowEvents={yellowEvents} redEvents={redEvents} />
+      {bench.length > 0 && (
+        <div className="rounded-[20px] border border-white/10 bg-white/6 p-3">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f7d149]">
+              Bench reserve
+            </p>
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-black text-white/55">
+              {bench.length}
+            </span>
           </div>
-        ))}
+          <div className="max-h-[200px] space-y-1.5 overflow-y-auto pr-1">
+            {bench.map((player) => (
+              <div
+                key={`${player.shirtNumber}-${player.name}`}
+                className="grid grid-cols-[28px_36px_1fr] items-center gap-2 rounded-xl bg-white/7 p-2 text-sm"
+              >
+                <span className="font-mono text-xs font-black text-[#f7d149]">
+                  {player.shirtNumber ?? "--"}
+                </span>
+                <span className="rounded-full bg-white/10 px-2 py-1 text-center text-[10px] font-black text-white/62">
+                  {player.positionCode}
+                </span>
+                <span className="min-w-0 truncate font-black text-white/90">{player.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── pitch map ────────────────────────────────────────────────────────────────
+
+function PitchMap({
+  slots,
+  goalEvents,
+  yellowEvents,
+  redEvents,
+}: {
+  slots: Array<FormationSlot & { player: SlotPlayer }>;
+  goalEvents: MatchEvent[];
+  yellowEvents: MatchEvent[];
+  redEvents: MatchEvent[];
+}) {
+  return (
+    <div className="overflow-x-auto rounded-[20px] border border-white/12 bg-[#0f4b2f] shadow-[inset_0_0_60px_rgba(0,0,0,0.28)]">
+      <div className="relative min-h-[480px] min-w-[320px] overflow-hidden p-4">
+        {/* Grid texture */}
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(0deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:60px_60px]" />
+        {/* Penalty boxes */}
+        <div className="absolute inset-x-[12%] bottom-0 h-[22%] rounded-t-[24px] border border-white/25 border-b-0" />
+        <div className="absolute inset-x-[34%] bottom-0 h-[9%] rounded-t-lg border border-white/25 border-b-0" />
+        <div className="absolute inset-x-[12%] top-0 h-[22%] rounded-b-[24px] border border-white/14 border-t-0" />
+        {/* Center */}
+        <div className="absolute left-1/2 top-1/2 size-20 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/16" />
+        <div className="absolute left-1/2 top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/25" />
+        <div className="absolute inset-x-0 top-1/2 h-px bg-white/16" />
+
+        <div className="relative h-[440px]">
+          {slots.map((slot, i) => {
+            const goals = goalEvents.filter((e) => matchesEvent(slot.player.name, e.title)).length;
+            const yellow = yellowEvents.some((e) => matchesEvent(slot.player.name, e.title));
+            const red = redEvents.some((e) => matchesEvent(slot.player.name, e.title));
+            const allGoals = goalEvents.filter((e) =>
+              slots.some((s) => matchesEvent(s.player.name, e.title)),
+            ).length;
+            const maxGoals = slots.reduce(
+              (max, s) => Math.max(max, goalEvents.filter((e) => matchesEvent(s.player.name, e.title)).length),
+              0,
+            );
+            const isTopScorer = maxGoals > 0 && goals === maxGoals;
+
+            return (
+              <div
+                key={`${slot.role}-${i}`}
+                className="absolute -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
+              >
+                <MatchPlayerNode
+                  player={slot.player}
+                  goals={goals}
+                  yellow={yellow}
+                  red={red}
+                  isTopScorer={isTopScorer}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 }
 
-function PitchMarkings() {
-  return (
-    <div className="pointer-events-none absolute inset-0">
-      {/* Center line */}
-      <div className="absolute inset-x-4 top-1/2 h-px -translate-y-px bg-white/20" />
-      {/* Center circle */}
-      <div className="absolute left-1/2 top-1/2 size-14 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/20" />
-      {/* Top penalty box */}
-      <div className="absolute inset-x-8 top-3 h-10 rounded-sm border border-white/15" />
-      {/* Bottom penalty box */}
-      <div className="absolute inset-x-8 bottom-3 h-10 rounded-sm border border-white/15" />
-    </div>
-  );
-}
-
-// ─── squad fallback list ──────────────────────────────────────────────────────
-
-function SquadList({
-  squad,
-  teamEvents,
-  theme,
+function MatchPlayerNode({
+  player,
+  goals,
+  yellow,
+  red,
+  isTopScorer,
 }: {
-  squad: MatchCenterTeam["squad"];
-  teamEvents: MatchEvent[];
-  theme: Theme;
+  player: SlotPlayer;
+  goals: number;
+  yellow: boolean;
+  red: boolean;
+  isTopScorer: boolean;
 }) {
-  const goalEvents = teamEvents.filter(
-    (e) => e.eventType === "goal" || e.eventType === "penalty_goal" || e.eventType === "own_goal",
-  );
-  const yellowEvents = teamEvents.filter((e) => e.eventType === "yellow_card");
-  const redEvents = teamEvents.filter((e) => e.eventType === "red_card");
-
-  const goalCounts = squad.map((p) =>
-    goalEvents.filter((e) => matchesEvent(p.name, e.title)).length,
-  );
-  const maxGoals = Math.max(0, ...goalCounts);
-
-  if (!squad.length) {
-    return (
-      <p className="rounded-2xl bg-stadium p-3 text-sm font-bold text-[#10131a]/56">
-        Squad data not loaded yet.
-      </p>
-    );
-  }
+  const role = toFormationRole(player.positionCode);
+  const roleStyle = roleStyles[role];
+  const lastName = player.name.split(" ").slice(-1)[0];
 
   return (
-    <div className="max-h-[400px] space-y-1.5 overflow-y-auto pr-1">
-      {squad.map((player, i) => {
-        const goals = goalCounts[i];
-        const yellow = yellowEvents.some((e) => matchesEvent(player.name, e.title));
-        const red = redEvents.some((e) => matchesEvent(player.name, e.title));
-        const isTop = maxGoals > 0 && goals === maxGoals;
-
-        return (
-          <article
-            key={`${player.shirtNumber}-${player.name}`}
-            className="grid grid-cols-[32px_40px_1fr_auto] items-center gap-2.5 rounded-2xl border p-2.5 text-sm"
-            style={{
-              background: isTop
-                ? "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(255,255,255,0.9))"
-                : goals > 0
-                ? "linear-gradient(135deg, rgba(250,204,21,0.07), rgba(255,255,255,0.92))"
-                : "rgba(255,255,255,0.7)",
-              borderColor: isTop ? "rgba(250,204,21,0.45)" : theme.ring,
-            }}
-          >
-            <span className="font-mono text-xs font-black text-cobalt">
-              {player.shirtNumber ?? "--"}
-            </span>
-            <span className={`rounded-full px-1.5 py-0.5 text-center text-[10px] font-black ${playerRoleClass(player.positionCode, player.position)}`}>
-              {player.positionCode}
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-black text-[#10131a]">{player.name}</span>
-              <span className="block truncate text-[11px] font-bold text-[#10131a]/48">{player.club}</span>
-            </span>
-            <span className="flex shrink-0 items-center gap-0.5 text-sm leading-none">
-              {goals > 0 && "⚽".repeat(Math.min(goals, 3))}
-              {yellow && "🟨"}
-              {red && "🟥"}
-            </span>
-          </article>
-        );
-      })}
+    <div className="relative">
+      {/* Event badges */}
+      {(goals > 0 || yellow || red) && (
+        <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-10 flex gap-0.5 text-[11px] leading-none">
+          {goals > 0 && "⚽".repeat(Math.min(goals, 3))}
+          {yellow && "🟨"}
+          {red && "🟥"}
+        </div>
+      )}
+      <div
+        className={`grid w-[80px] place-items-center rounded-full border px-1.5 py-1.5 text-center shadow-[0_6px_16px_rgba(0,0,0,0.28)] sm:w-[96px] ${roleStyle.node} ${isTopScorer ? "ring-2 ring-[#f7d149] ring-offset-1 ring-offset-transparent" : ""}`}
+      >
+        <span className={`grid size-6 place-items-center rounded-full font-mono text-[11px] font-black ${roleStyle.number}`}>
+          {player.shirtNumber ?? "--"}
+        </span>
+        <span className="mt-0.5 w-full truncate text-[11px] font-black leading-tight px-1">
+          {lastName}
+        </span>
+        <span className={`mt-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-black ${roleStyle.badge}`}>
+          {player.positionCode}
+        </span>
+      </div>
     </div>
   );
 }
@@ -351,7 +317,7 @@ function HistoryList({ history }: { history: RecentTeamMatch[] }) {
 
   if (!recent.length) {
     return (
-      <p className="rounded-2xl bg-stadium p-3 text-sm font-bold text-[#10131a]/56">
+      <p className="rounded-2xl bg-white/8 p-3 text-sm font-bold text-white/55">
         Recent match history not loaded yet.
       </p>
     );
@@ -360,25 +326,25 @@ function HistoryList({ history }: { history: RecentTeamMatch[] }) {
   return (
     <div className="space-y-2">
       <div className="mb-3 flex items-center gap-2">
-        <Shield className="size-4 text-cobalt" />
-        <span className="text-xs font-black uppercase tracking-[0.18em] text-[#10131a]/55">
+        <Shield className="size-4 text-[#f7d149]" />
+        <span className="text-xs font-black uppercase tracking-[0.18em] text-white/55">
           Last {recent.length} matches
         </span>
       </div>
       {recent.map((match) => (
         <article
           key={`${match.date}-${match.home}-${match.away}`}
-          className="flex items-center justify-between gap-3 rounded-2xl border border-[#10131a]/8 bg-stadium p-3"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/7 p-3"
         >
           <div className="min-w-0">
-            <p className="text-[10px] font-black text-[#10131a]/45">
+            <p className="text-[10px] font-black text-white/40">
               {match.date} · {match.competition}
             </p>
-            <p className="mt-0.5 truncate text-sm font-black text-[#10131a]">
+            <p className="mt-0.5 truncate text-sm font-black text-white/90">
               {match.home} {match.homeScore}–{match.awayScore} {match.away}
             </p>
             {match.goals.length > 0 && (
-              <p className="mt-0.5 truncate text-[11px] font-bold text-[#10131a]/50">
+              <p className="mt-0.5 truncate text-[11px] font-bold text-white/50">
                 {match.goals.map((g) => `${g.scorer}${g.minute ? ` ${g.minute}'` : ""}`).join(", ")}
               </p>
             )}
@@ -394,35 +360,38 @@ function HistoryList({ history }: { history: RecentTeamMatch[] }) {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-function teamTheme(slug: string) {
-  const themes: Record<string, { dark: string; mid: string; ring: string; soft: string }> = {
-    argentina: { dark: "#5aa7d8", mid: "#ffffff", ring: "rgba(90,167,216,0.28)", soft: "rgba(90,167,216,0.14)" },
-    brazil: { dark: "#10843f", mid: "#f7d149", ring: "rgba(16,132,63,0.26)", soft: "rgba(16,132,63,0.13)" },
-    canada: { dark: "#d71920", mid: "#991b1b", ring: "rgba(215,25,32,0.24)", soft: "rgba(215,25,32,0.1)" },
-    czechia: { dark: "#11457e", mid: "#d7141a", ring: "rgba(17,69,126,0.22)", soft: "rgba(17,69,126,0.1)" },
-    france: { dark: "#0b2f78", mid: "#e33d30", ring: "rgba(11,47,120,0.24)", soft: "rgba(11,47,120,0.11)" },
-    germany: { dark: "#10131a", mid: "#d4a017", ring: "rgba(212,160,23,0.24)", soft: "rgba(212,160,23,0.12)" },
-    japan: { dark: "#bc002d", mid: "#7f1d1d", ring: "rgba(188,0,45,0.2)", soft: "rgba(188,0,45,0.09)" },
-    mexico: { dark: "#006847", mid: "#ce1126", ring: "rgba(0,104,71,0.24)", soft: "rgba(0,104,71,0.12)" },
-    morocco: { dark: "#c1272d", mid: "#006233", ring: "rgba(193,39,45,0.22)", soft: "rgba(193,39,45,0.1)" },
-    netherlands: { dark: "#f36c21", mid: "#123c7c", ring: "rgba(243,108,33,0.22)", soft: "rgba(243,108,33,0.11)" },
-    portugal: { dark: "#006600", mid: "#c8102e", ring: "rgba(0,102,0,0.22)", soft: "rgba(0,102,0,0.1)" },
-    "south-africa": { dark: "#007a4d", mid: "#ffb612", ring: "rgba(0,122,77,0.24)", soft: "rgba(0,122,77,0.12)" },
-    "south-korea": { dark: "#003478", mid: "#c60c30", ring: "rgba(0,52,120,0.22)", soft: "rgba(0,52,120,0.1)" },
-    spain: { dark: "#aa151b", mid: "#f1bf00", ring: "rgba(170,21,27,0.22)", soft: "rgba(170,21,27,0.1)" },
-    "united-states": { dark: "#1f3f8b", mid: "#b31942", ring: "rgba(31,63,139,0.22)", soft: "rgba(31,63,139,0.1)" },
-    usa: { dark: "#1f3f8b", mid: "#b31942", ring: "rgba(31,63,139,0.22)", soft: "rgba(31,63,139,0.1)" },
-  };
-  return themes[slug] ?? { dark: "#10131a", mid: "#0b5cff", ring: "rgba(11,92,255,0.18)", soft: "rgba(11,92,255,0.09)" };
+function stripMinute(s: string) {
+  return s.replace(/\s+\d+(\+\d+)?'$/, "").trim();
 }
 
-function playerRoleClass(code: string, position: string) {
-  const label = `${code} ${position}`.toLowerCase();
-  if (label.includes("gk") || label.includes("goal")) return "bg-amber-200 text-amber-950";
-  if (label.includes("fw") || label.includes("forward") || label.includes("striker") || label.includes("wing")) return "bg-red-100 text-red-800";
-  if (label.includes("mf") || label.includes("mid")) return "bg-sky-100 text-sky-800";
-  if (label.includes("df") || label.includes("def")) return "bg-emerald-100 text-emerald-800";
-  return "bg-white text-[#10131a]/62";
+function matchesEvent(playerName: string, eventTitle: string) {
+  const p = playerName.toLowerCase();
+  const e = stripMinute(eventTitle).toLowerCase();
+  return (
+    p.includes(e) ||
+    e.includes(p) ||
+    p.split(" ").some((part) => part.length > 2 && e.includes(part))
+  );
+}
+
+function shirtFor(name: string, squad: MatchCenterTeam["squad"]): number | null {
+  const exact = squad.find((p) => p.name.toLowerCase() === name.toLowerCase());
+  if (exact) return exact.shirtNumber ?? null;
+  const partial = squad.find((p) => {
+    const pn = p.name.toLowerCase();
+    const n = name.toLowerCase();
+    return pn.includes(n) || n.includes(pn);
+  });
+  return partial?.shirtNumber ?? null;
+}
+
+function groupSquad(squad: MatchCenterTeam["squad"]) {
+  return {
+    GK: squad.filter((p) => p.positionCode === "GK"),
+    DF: squad.filter((p) => p.positionCode === "DF"),
+    MF: squad.filter((p) => p.positionCode === "MF"),
+    FW: squad.filter((p) => p.positionCode === "FW"),
+  };
 }
 
 function resultClass(result: RecentTeamMatch["result"]) {
@@ -430,3 +399,218 @@ function resultClass(result: RecentTeamMatch["result"]) {
   if (result === "L") return "bg-red-100 text-red-800";
   return "bg-sky-100 text-sky-800";
 }
+
+type FormationRole = "DF" | "FW" | "GK" | "MF";
+
+function toFormationRole(positionCode: string): FormationRole {
+  return ["DF", "FW", "GK", "MF"].includes(positionCode)
+    ? (positionCode as FormationRole)
+    : "FW";
+}
+
+type FormationSlot = { role: FormationRole; x: number; y: number };
+
+const roleStyles: Record<FormationRole, { badge: string; node: string; number: string }> = {
+  DF: {
+    badge: "bg-emerald-950/12 text-emerald-950/62",
+    node: "border-emerald-100/55 bg-emerald-300/95 text-emerald-950",
+    number: "bg-emerald-950 text-emerald-100",
+  },
+  FW: {
+    badge: "bg-red-950/12 text-red-950/62",
+    node: "border-red-100/55 bg-red-300/95 text-red-950",
+    number: "bg-red-950 text-red-100",
+  },
+  GK: {
+    badge: "bg-amber-950/12 text-amber-950/62",
+    node: "border-amber-100/65 bg-amber-300/95 text-amber-950",
+    number: "bg-amber-950 text-amber-100",
+  },
+  MF: {
+    badge: "bg-sky-950/12 text-sky-950/62",
+    node: "border-sky-100/55 bg-sky-300/95 text-sky-950",
+    number: "bg-sky-950 text-sky-100",
+  },
+};
+
+const formationPresets: Record<string, { name: string; slots: FormationSlot[] }> = {
+  "3-5-2": {
+    name: "3-5-2",
+    slots: [
+      { role: "FW", x: 38, y: 15 },
+      { role: "FW", x: 62, y: 15 },
+      { role: "MF", x: 16, y: 34 },
+      { role: "MF", x: 36, y: 38 },
+      { role: "MF", x: 50, y: 31 },
+      { role: "MF", x: 64, y: 38 },
+      { role: "MF", x: 84, y: 34 },
+      { role: "DF", x: 30, y: 62 },
+      { role: "DF", x: 50, y: 68 },
+      { role: "DF", x: 70, y: 62 },
+      { role: "GK", x: 50, y: 90 },
+    ],
+  },
+  "3-4-3": {
+    name: "3-4-3",
+    slots: [
+      { role: "FW", x: 25, y: 15 },
+      { role: "FW", x: 50, y: 12 },
+      { role: "FW", x: 75, y: 15 },
+      { role: "MF", x: 18, y: 40 },
+      { role: "MF", x: 40, y: 42 },
+      { role: "MF", x: 60, y: 42 },
+      { role: "MF", x: 82, y: 40 },
+      { role: "DF", x: 30, y: 68 },
+      { role: "DF", x: 50, y: 72 },
+      { role: "DF", x: 70, y: 68 },
+      { role: "GK", x: 50, y: 90 },
+    ],
+  },
+  "4-2-3-1": {
+    name: "4-2-3-1",
+    slots: [
+      { role: "FW", x: 50, y: 13 },
+      { role: "MF", x: 20, y: 30 },
+      { role: "MF", x: 50, y: 27 },
+      { role: "MF", x: 80, y: 30 },
+      { role: "MF", x: 38, y: 48 },
+      { role: "MF", x: 62, y: 48 },
+      { role: "DF", x: 18, y: 68 },
+      { role: "DF", x: 39, y: 72 },
+      { role: "DF", x: 61, y: 72 },
+      { role: "DF", x: 82, y: 68 },
+      { role: "GK", x: 50, y: 90 },
+    ],
+  },
+  "4-2-4": {
+    name: "4-2-4",
+    slots: [
+      { role: "FW", x: 16, y: 18 },
+      { role: "FW", x: 38, y: 13 },
+      { role: "FW", x: 62, y: 13 },
+      { role: "FW", x: 84, y: 18 },
+      { role: "MF", x: 40, y: 45 },
+      { role: "MF", x: 60, y: 45 },
+      { role: "DF", x: 18, y: 68 },
+      { role: "DF", x: 39, y: 72 },
+      { role: "DF", x: 61, y: 72 },
+      { role: "DF", x: 82, y: 68 },
+      { role: "GK", x: 50, y: 90 },
+    ],
+  },
+  "4-3-3": {
+    name: "4-3-3",
+    slots: [
+      { role: "FW", x: 25, y: 15 },
+      { role: "FW", x: 50, y: 12 },
+      { role: "FW", x: 75, y: 15 },
+      { role: "MF", x: 30, y: 40 },
+      { role: "MF", x: 50, y: 34 },
+      { role: "MF", x: 70, y: 40 },
+      { role: "DF", x: 18, y: 68 },
+      { role: "DF", x: 39, y: 72 },
+      { role: "DF", x: 61, y: 72 },
+      { role: "DF", x: 82, y: 68 },
+      { role: "GK", x: 50, y: 90 },
+    ],
+  },
+  "4-4-2": {
+    name: "4-4-2",
+    slots: [
+      { role: "FW", x: 38, y: 14 },
+      { role: "FW", x: 62, y: 14 },
+      { role: "MF", x: 18, y: 42 },
+      { role: "MF", x: 40, y: 45 },
+      { role: "MF", x: 60, y: 45 },
+      { role: "MF", x: 82, y: 42 },
+      { role: "DF", x: 18, y: 68 },
+      { role: "DF", x: 39, y: 72 },
+      { role: "DF", x: 61, y: 72 },
+      { role: "DF", x: 82, y: 68 },
+      { role: "GK", x: 50, y: 90 },
+    ],
+  },
+  "5-2-3": {
+    name: "5-2-3",
+    slots: [
+      { role: "FW", x: 25, y: 15 },
+      { role: "FW", x: 50, y: 12 },
+      { role: "FW", x: 75, y: 15 },
+      { role: "MF", x: 40, y: 44 },
+      { role: "MF", x: 60, y: 44 },
+      { role: "DF", x: 14, y: 68 },
+      { role: "DF", x: 32, y: 72 },
+      { role: "DF", x: 50, y: 74 },
+      { role: "DF", x: 68, y: 72 },
+      { role: "DF", x: 86, y: 68 },
+      { role: "GK", x: 50, y: 90 },
+    ],
+  },
+  "5-4-1": {
+    name: "5-4-1",
+    slots: [
+      { role: "FW", x: 50, y: 13 },
+      { role: "MF", x: 18, y: 38 },
+      { role: "MF", x: 40, y: 42 },
+      { role: "MF", x: 60, y: 42 },
+      { role: "MF", x: 82, y: 38 },
+      { role: "DF", x: 14, y: 68 },
+      { role: "DF", x: 32, y: 72 },
+      { role: "DF", x: 50, y: 74 },
+      { role: "DF", x: 68, y: 72 },
+      { role: "DF", x: 86, y: 68 },
+      { role: "GK", x: 50, y: 90 },
+    ],
+  },
+};
+
+const researchedFormationBySlug: Record<string, keyof typeof formationPresets> = {
+  algeria: "4-2-3-1",
+  argentina: "4-3-3",
+  australia: "5-4-1",
+  austria: "4-2-3-1",
+  belgium: "4-3-3",
+  "bosnia-and-herzegovina": "4-4-2",
+  brazil: "4-2-4",
+  canada: "4-4-2",
+  "cape-verde": "4-3-3",
+  colombia: "4-2-3-1",
+  croatia: "4-2-3-1",
+  curacao: "4-3-3",
+  czechia: "3-4-3",
+  "dr-congo": "4-3-3",
+  ecuador: "4-2-3-1",
+  egypt: "4-3-3",
+  england: "4-2-3-1",
+  france: "4-2-3-1",
+  germany: "4-2-3-1",
+  ghana: "4-2-3-1",
+  haiti: "4-4-2",
+  iran: "4-2-3-1",
+  iraq: "4-4-2",
+  "ivory-coast": "4-3-3",
+  japan: "3-4-3",
+  jordan: "5-2-3",
+  mexico: "4-3-3",
+  morocco: "4-2-3-1",
+  netherlands: "4-2-3-1",
+  "new-zealand": "4-2-3-1",
+  norway: "4-3-3",
+  panama: "3-4-3",
+  paraguay: "4-2-3-1",
+  portugal: "4-3-3",
+  qatar: "4-2-3-1",
+  "saudi-arabia": "4-2-3-1",
+  scotland: "4-3-3",
+  senegal: "4-3-3",
+  "south-africa": "4-3-3",
+  "south-korea": "4-3-3",
+  spain: "4-3-3",
+  sweden: "4-3-3",
+  switzerland: "4-2-3-1",
+  tunisia: "4-3-3",
+  turkiye: "4-2-3-1",
+  uruguay: "4-2-3-1",
+  usa: "3-4-3",
+  uzbekistan: "5-2-3",
+};
