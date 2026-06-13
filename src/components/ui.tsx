@@ -511,7 +511,7 @@ export function WatchFlow({
   const scheduledMatches = matches.filter((match) => match.status !== "live");
 
   return (
-    <section className="min-w-0">
+    <section className="min-w-0 rounded-[24px] border border-[#10131a]/8 bg-white p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Flame className="size-4 text-cobalt" />
@@ -524,7 +524,7 @@ export function WatchFlow({
         </span>
       </div>
 
-      <div className="-mx-4 mt-4 flex snap-x gap-3 overflow-x-auto px-4 pb-3 sm:-mx-6 sm:px-6">
+      <div className="-mx-4 mt-4 flex snap-x gap-3 overflow-x-auto px-4 pb-3 sm:-mx-5 sm:px-5">
         {scheduledMatches.slice(0, 8).map((match, index) => (
           <Link
             aria-label={`Open ${match.home} vs ${match.away} match center`}
@@ -575,7 +575,7 @@ export function WatchFlow({
           <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-[#10131a]/38">
             On deck tomorrow
           </p>
-          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6">
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-5 sm:px-5">
             {items.slice(0, 5).map((item) => (
               <article
                 className="shrink-0 min-w-[170px] rounded-xl border border-[#10131a]/8 px-3 py-2.5"
@@ -700,7 +700,7 @@ export function ResultsRibbon({ matches }: { matches: Match[] }) {
         </Link>
       </div>
 
-      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6">
+      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6">
         {matches.map((match) => {
           const s = parseScore(match.score);
           const homeWon = s ? s.home > s.away : false;
@@ -710,7 +710,7 @@ export function ResultsRibbon({ matches }: { matches: Match[] }) {
             <Link
               key={match.matchNumber}
               href={`/matches/${match.matchNumber}`}
-              className="group flex w-[190px] shrink-0 flex-col gap-2 rounded-2xl border border-[#10131a]/10 bg-white px-4 py-3 shadow-sm transition hover:border-cobalt/40"
+              className="group flex w-[215px] shrink-0 flex-col gap-2 rounded-2xl border border-[#10131a]/10 bg-stadium px-4 py-3 transition hover:border-cobalt/40 hover:shadow-sm"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-black uppercase tracking-wider text-[#10131a]/40">
