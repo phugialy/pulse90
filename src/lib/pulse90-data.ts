@@ -687,7 +687,7 @@ export async function getTodayDashboard() {
         .select("*")
         .eq("status", "completed")
         .order("starts_at", { ascending: false })
-        .limit(8),
+        .limit(4),
       supabase
         .from("predictions")
         .select("*")
@@ -885,43 +885,56 @@ export async function getFixtureExplorer() {
   return { upcoming, results };
 }
 
-export async function getResultsPage(): Promise<ResultMatch[]> {
-  const supabase = getSupabaseReadClient();
-  if (!supabase) return [];
+const RESULTS_PER_PAGE = 10;
 
-  const [result, teamFlags] = await Promise.all([
+export async function getResultsPage(page = 1): Promise<{ matches: ResultMatch[]; total: number; page: number; totalPages: number }> {
+  const supabase = getSupabaseReadClient();
+  if (!supabase) return { matches: [], total: 0, page: 1, totalPages: 0 };
+
+  const offset = (page - 1) * RESULTS_PER_PAGE;
+
+  const [result, countResult, teamFlags] = await Promise.all([
     supabase
       .from("fixture_cards_view")
       .select("*")
       .eq("status", "completed")
       .order("starts_at", { ascending: false })
-      .limit(64),
+      .range(offset, offset + RESULTS_PER_PAGE - 1),
+    supabase
+      .from("fixture_cards_view")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "completed"),
     getFixtureTeamFlags(),
   ]);
 
-  if (result.error || !result.data?.length) return [];
+  if (result.error) return { matches: [], total: 0, page: 1, totalPages: 0 };
+
+  const total = countResult.count ?? 0;
+  const totalPages = Math.ceil(total / RESULTS_PER_PAGE);
 
   const completedRows = (result.data as FixtureCardRow[]).filter(
     (r) => r.home_score !== null && r.away_score !== null,
   );
 
   const ids = completedRows.map((r) => r.id);
-  const eventsResult = await supabase
-    .from("match_events")
-    .select("fixture_id, event_type, minute, title")
-    .in("fixture_id", ids)
-    .in("event_type", ["goal", "penalty_goal", "own_goal"])
-    .order("minute", { ascending: true, nullsFirst: false });
+  const goalsByFixture = new Map<string, { fixture_id: string; event_type: string; minute: number | null; title: string }[]>();
 
-  type GoalEventRow = { fixture_id: string; event_type: string; minute: number | null; title: string };
-  const goalsByFixture = new Map<string, GoalEventRow[]>();
-  for (const ev of ((eventsResult.data ?? []) as GoalEventRow[])) {
-    const arr = goalsByFixture.get(ev.fixture_id) ?? [];
-    arr.push(ev);
-    goalsByFixture.set(ev.fixture_id, arr);
+  if (ids.length > 0) {
+    const eventsResult = await supabase
+      .from("match_events")
+      .select("fixture_id, event_type, minute, title")
+      .in("fixture_id", ids)
+      .in("event_type", ["goal", "penalty_goal", "own_goal"])
+      .order("minute", { ascending: true, nullsFirst: false });
+
+    for (const ev of (eventsResult.data ?? []) as { fixture_id: string; event_type: string; minute: number | null; title: string }[]) {
+      const arr = goalsByFixture.get(ev.fixture_id) ?? [];
+      arr.push(ev);
+      goalsByFixture.set(ev.fixture_id, arr);
+    }
   }
 
-  return completedRows.map((row) => {
+  const matches = completedRows.map((row) => {
     const homeFlag = row.home_team_slug ? teamFlags.get(row.home_team_slug) : undefined;
     const awayFlag = row.away_team_slug ? teamFlags.get(row.away_team_slug) : undefined;
     return {
@@ -944,6 +957,8 @@ export async function getResultsPage(): Promise<ResultMatch[]> {
       })),
     };
   });
+
+  return { matches, total, page, totalPages };
 }
 
 export async function getTomorrowPlan() {

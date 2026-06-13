@@ -1,12 +1,19 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PageIntro } from "@/components/ui";
 import { getResultsPage, type ResultMatch } from "@/lib/pulse90-data";
 
-export default async function ResultsPage() {
-  const results = await getResultsPage();
+export default async function ResultsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const params = await searchParams;
+  const page = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
+  const { matches, total, totalPages } = await getResultsPage(page);
 
   return (
     <AppShell>
@@ -17,20 +24,72 @@ export default async function ResultsPage() {
           detail="Most recent first. Tap any match to open the full match center."
         />
 
-        {results.length === 0 ? (
+        {matches.length === 0 && total === 0 ? (
           <div className="mt-10 rounded-[24px] border border-[#10131a]/10 bg-white p-8 text-center shadow-sm">
             <p className="text-sm font-bold text-[#10131a]/50">
               Results will appear here as matches are played.
             </p>
           </div>
         ) : (
-          <div className="mt-8 overflow-hidden rounded-[24px] border border-[#10131a]/10 bg-white shadow-sm">
-            <div className="divide-y divide-[#10131a]/6">
-              {results.map((r) => (
-                <ResultRow key={r.matchNumber} result={r} />
-              ))}
+          <>
+            <div className="mt-2 flex items-center justify-between">
+              <p className="text-xs font-bold text-[#10131a]/40">
+                {total} matches played · page {page} of {totalPages}
+              </p>
             </div>
-          </div>
+
+            <div className="mt-4 overflow-hidden rounded-[24px] border border-[#10131a]/10 bg-white shadow-sm">
+              <div className="divide-y divide-[#10131a]/6">
+                {matches.map((r) => (
+                  <ResultRow key={r.matchNumber} result={r} />
+                ))}
+              </div>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="mt-6 flex items-center justify-between gap-4">
+                {page > 1 ? (
+                  <Link
+                    href={`/results?page=${page - 1}`}
+                    className="inline-flex h-10 items-center gap-2 rounded-full border border-[#10131a]/10 bg-white px-4 text-sm font-black text-[#10131a] shadow-sm transition hover:border-cobalt/40 hover:text-cobalt"
+                  >
+                    <ChevronLeft className="size-4" />
+                    Newer
+                  </Link>
+                ) : (
+                  <span />
+                )}
+
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                    <Link
+                      key={p}
+                      href={`/results?page=${p}`}
+                      className={`flex size-8 items-center justify-center rounded-full text-sm font-black transition ${
+                        p === page
+                          ? "bg-cobalt text-white"
+                          : "text-[#10131a]/50 hover:bg-[#10131a]/5"
+                      }`}
+                    >
+                      {p}
+                    </Link>
+                  ))}
+                </div>
+
+                {page < totalPages ? (
+                  <Link
+                    href={`/results?page=${page + 1}`}
+                    className="inline-flex h-10 items-center gap-2 rounded-full border border-[#10131a]/10 bg-white px-4 text-sm font-black text-[#10131a] shadow-sm transition hover:border-cobalt/40 hover:text-cobalt"
+                  >
+                    Older
+                    <ChevronRight className="size-4" />
+                  </Link>
+                ) : (
+                  <span />
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
     </AppShell>
