@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { MatchTeamTabs } from "@/components/match-team-tabs";
 import { WhoWinsVote } from "@/components/who-wins-vote";
+import { LiveRefresh } from "@/components/live-refresh";
 import { PageIntro, StatusPill, WhereToWatch } from "@/components/ui";
 import { Sparkles } from "lucide-react";
 import {
@@ -30,6 +31,7 @@ export default async function MatchPage({
 
   return (
     <AppShell>
+      <LiveRefresh isLive={match.status === "live"} />
       <div className="mx-auto grid max-w-7xl gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8">
         <section className="min-w-0 space-y-5">
           <PageIntro
@@ -128,7 +130,13 @@ export default async function MatchPage({
             />
           )}
 
-          <MatchTeamTabs awayTeam={awayTeam} homeTeam={homeTeam} />
+          <MatchTeamTabs
+            awayTeam={awayTeam}
+            awayTeamId={awayTeamId}
+            events={events}
+            homeTeam={homeTeam}
+            homeTeamId={homeTeamId}
+          />
         </section>
 
         <aside className="min-w-0 space-y-5">

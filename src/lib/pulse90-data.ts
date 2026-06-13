@@ -139,6 +139,7 @@ export type MatchCenterGroupRow = {
 export type MatchCenterTeam = {
   flagAssetUrl: string | null;
   flagEmoji: string;
+  formation?: string;
   group: string;
   history: RecentTeamMatch[];
   name: string;
@@ -1099,7 +1100,7 @@ export async function getMatchCenter(matchNumber: string) {
   const teamSlugs = [fixture.home_team_slug, fixture.away_team_slug].filter(
     (slug): slug is string => Boolean(slug),
   );
-  const [teamsResult, groupResult, eventsResult, predictionsResult] = await Promise.all([
+  const [teamsResult, groupResult, eventsResult, predictionsResult, lineupsResult] = await Promise.all([
     supabase
       .from("teams")
       .select("id, slug, name, fifa_code, flag_emoji, flag_asset_url, group_code")
@@ -1125,6 +1126,10 @@ export async function getMatchCenter(matchNumber: string) {
       .eq("fixture_id", fixture.id)
       .in("prediction_type", ["player_goal", "player_card", "match_winner"])
       .order("probability", { ascending: false }),
+    supabase
+      .from("fixture_lineups")
+      .select("team_id, formation")
+      .eq("fixture_id", fixture.id),
   ]);
   const teamRows = teamsResult.error ? [] : (teamsResult.data as MatchCenterTeamRow[]);
   const teamFlags = new Map(
@@ -1144,6 +1149,17 @@ export async function getMatchCenter(matchNumber: string) {
     awayTeamRow ? getMatchCenterTeam(supabase, awayTeamRow) : Promise.resolve(null),
     getVoteTally(supabase, fixture.id, homeTeamRow?.id ?? null, awayTeamRow?.id ?? null),
   ]);
+
+  type LineupRow = { team_id: string; formation: string | null };
+  const lineups = (lineupsResult.data ?? []) as LineupRow[];
+  if (homeTeam) {
+    const l = lineups.find((r) => r.team_id === homeTeamRow?.id);
+    if (l?.formation) homeTeam.formation = l.formation;
+  }
+  if (awayTeam) {
+    const l = lineups.find((r) => r.team_id === awayTeamRow?.id);
+    if (l?.formation) awayTeam.formation = l.formation;
+  }
   const groupTable = groupResult.error
     ? []
     : (groupResult.data as LiveGroupProjectionRow[]).map((standing) => ({
