@@ -2,263 +2,397 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Shield, Users } from "lucide-react";
+import { Shield } from "lucide-react";
 import type { MatchCenterTeam, MatchEvent, RecentTeamMatch } from "@/lib/pulse90-data";
 
-type MatchTeamTabsProps = {
-  awayTeam: MatchCenterTeam | null;
+// ─── public component ────────────────────────────────────────────────────────
+
+type Props = {
   homeTeam: MatchCenterTeam | null;
+  awayTeam: MatchCenterTeam | null;
   events: MatchEvent[];
   homeTeamId: string | null;
   awayTeamId: string | null;
 };
 
-export function MatchTeamTabs({ awayTeam, homeTeam, events, homeTeamId, awayTeamId }: MatchTeamTabsProps) {
-  const teams = [homeTeam, awayTeam].filter((team): team is MatchCenterTeam => Boolean(team));
-  const [activeSlug, setActiveSlug] = useState(teams[0]?.slug ?? "");
-  const activeTeam = teams.find((team) => team.slug === activeSlug) ?? teams[0];
+export function MatchTeamTabs({ homeTeam, awayTeam, events, homeTeamId, awayTeamId }: Props) {
+  if (!homeTeam && !awayTeam) return null;
 
-  if (!activeTeam) return null;
-
-  const activeTeamId = activeTeam.slug === homeTeam?.slug ? homeTeamId : awayTeamId;
-  const teamEvents = events.filter((e) => e.teamId === activeTeamId);
+  const homeEvents = events.filter((e) => e.teamId === homeTeamId);
+  const awayEvents = events.filter((e) => e.teamId === awayTeamId);
 
   return (
-    <section className="min-w-0 rounded-[24px] border border-[#10131a]/10 bg-white/88 p-3 shadow-sm">
-      <div className="grid grid-cols-2 gap-2 rounded-[20px] bg-[#10131a]/5 p-1">
-        {teams.map((team) => {
-          const active = team.slug === activeTeam.slug;
-          const theme = teamTheme(team.slug);
-          return (
-            <button
-              className={`min-w-0 rounded-2xl px-3 py-3 text-left transition ${
-                active ? "text-white shadow-sm" : "border border-[#10131a]/8 bg-white/70 text-[#10131a]/58"
-              }`}
-              key={team.slug}
-              onClick={() => setActiveSlug(team.slug)}
-              style={{
-                background: active
-                  ? `linear-gradient(135deg, ${theme.dark}, ${theme.mid})`
-                  : `linear-gradient(135deg, ${theme.soft}, rgba(255,255,255,0.86))`,
-                borderColor: active ? theme.ring : undefined,
-              }}
-              type="button"
-            >
-              <span className="block truncate text-xs font-black uppercase tracking-[0.18em]">
-                {team.group}
-              </span>
-              <span className="mt-1 block truncate text-lg font-black">{team.name}</span>
-            </button>
-          );
-        })}
+    <section className="overflow-hidden rounded-[28px] border border-[#10131a]/10 bg-white shadow-sm">
+      <div className="border-b border-[#10131a]/8 px-5 py-4">
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-[#10131a]/55">
+          Lineups &amp; team info
+        </p>
       </div>
-
-      <TeamMatchPanel team={activeTeam} teamEvents={teamEvents} />
+      <div className="grid divide-y divide-[#10131a]/8 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+        {homeTeam && (
+          <TeamPanel team={homeTeam} teamEvents={homeEvents} side="home" />
+        )}
+        {awayTeam && (
+          <TeamPanel team={awayTeam} teamEvents={awayEvents} side="away" />
+        )}
+      </div>
     </section>
   );
 }
 
-// Strip "Lozano 14'" → "Lozano", "Mbappe 45+2'" → "Mbappe"
-function stripMinute(s: string) {
-  return s.replace(/\s+\d+(\+\d+)?'$/, "").trim();
-}
+// ─── per-team panel ───────────────────────────────────────────────────────────
 
-function playerMatchesTitle(playerName: string, title: string): boolean {
-  const p = playerName.toLowerCase();
-  const e = stripMinute(title).toLowerCase();
-  return p.includes(e) || e.includes(p) || p.split(" ").some((part) => part.length > 2 && e.includes(part));
-}
+type TeamPanelProps = {
+  team: MatchCenterTeam;
+  teamEvents: MatchEvent[];
+  side: "home" | "away";
+};
 
-function TeamMatchPanel({ team, teamEvents }: { team: MatchCenterTeam; teamEvents: MatchEvent[] }) {
+function TeamPanel({ team, teamEvents, side }: TeamPanelProps) {
+  const [tab, setTab] = useState<"lineup" | "history">("lineup");
   const theme = teamTheme(team.slug);
+  const hasLineup = Boolean(team.startingXi?.length && team.formation);
 
   return (
-    <div
-      className="mt-4 min-w-0 overflow-hidden rounded-[22px] border p-4"
-      style={{
-        background: `linear-gradient(160deg, ${theme.soft} 0%, rgba(255,255,255,0.94) 34%, rgba(255,255,255,0.9) 100%)`,
-        borderColor: theme.ring,
-      }}
-    >
+    <div className="flex flex-col p-5">
+      {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-cobalt">{team.group}</p>
-          <h2 className="mt-1 truncate text-2xl font-black text-[#10131a]">{team.name}</h2>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-cobalt">
+            {team.group}
+          </p>
+          <h3 className="mt-0.5 truncate text-xl font-black text-[#10131a]">{team.name}</h3>
           {team.formation && (
-            <span className="mt-1 inline-block rounded-full bg-[#10131a]/6 px-2.5 py-0.5 text-[11px] font-black tracking-widest text-[#10131a]/60">
+            <span
+              className="mt-1 inline-block rounded-full px-2.5 py-0.5 text-[11px] font-black text-white"
+              style={{ background: theme.dark }}
+            >
               {team.formation}
             </span>
           )}
         </div>
         <Link
-          className="shrink-0 rounded-full px-3 py-2 text-xs font-black text-white shadow-sm"
+          className="shrink-0 rounded-full px-3 py-2 text-xs font-black text-white shadow-sm transition hover:opacity-80"
           href={`/teams/${team.slug}`}
           style={{ background: `linear-gradient(135deg, ${theme.dark}, ${theme.mid})` }}
         >
-          Team
+          Team page →
         </Link>
       </div>
 
-      <HistoryBlock history={team.history} theme={theme} />
-      <SquadBlock squad={team.squad} teamEvents={teamEvents} theme={theme} />
-    </div>
-  );
-}
-
-function HistoryBlock({
-  history,
-  theme,
-}: {
-  history: RecentTeamMatch[];
-  theme: ReturnType<typeof teamTheme>;
-}) {
-  return (
-    <div className="mt-5">
-      <div className="mb-3 flex items-center gap-2">
-        <Shield className="size-4 text-cobalt" />
-        <h3 className="text-xs font-black uppercase tracking-[0.18em] text-[#10131a]/58">
+      {/* Tabs */}
+      <div className="mt-4 flex rounded-full bg-[#10131a]/5 p-1 w-fit gap-1">
+        <button
+          onClick={() => setTab("lineup")}
+          className={`rounded-full px-3 py-1.5 text-xs font-black transition ${
+            tab === "lineup" ? "bg-[#10131a] text-white shadow-sm" : "text-[#10131a]/55 hover:text-[#10131a]"
+          }`}
+          type="button"
+        >
+          {hasLineup ? "Formation" : "Squad"}
+        </button>
+        <button
+          onClick={() => setTab("history")}
+          className={`rounded-full px-3 py-1.5 text-xs font-black transition ${
+            tab === "history" ? "bg-[#10131a] text-white shadow-sm" : "text-[#10131a]/55 hover:text-[#10131a]"
+          }`}
+          type="button"
+        >
           Last 4 matches
-        </h3>
+        </button>
       </div>
-      <div className="grid gap-2">
-        {history.length ? (
-          history.map((match) => (
-            <article
-              className="rounded-2xl border p-3"
-              key={`${match.date}-${match.home}-${match.away}`}
-              style={{
-                background: `linear-gradient(135deg, rgba(255,255,255,0.72), ${teamThemeForHistory(theme)})`,
-                borderColor: theme.ring,
-              }}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-black text-[#10131a]/48">
-                    {match.date} / {match.competition}
-                  </p>
-                  <p className="mt-1 truncate text-sm font-black text-[#10131a]">
-                    {match.home} {match.homeScore}-{match.awayScore} {match.away}
-                  </p>
-                </div>
-                <span className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-black ${resultClass(match.result)}`}>
-                  {match.result}
-                </span>
-              </div>
-            </article>
-          ))
+
+      {/* Content */}
+      <div className="mt-4 flex-1">
+        {tab === "lineup" ? (
+          hasLineup ? (
+            <FormationPitch
+              formation={team.formation!}
+              startingXi={team.startingXi!}
+              squad={team.squad}
+              teamEvents={teamEvents}
+              theme={theme}
+            />
+          ) : (
+            <SquadList squad={team.squad} teamEvents={teamEvents} theme={theme} />
+          )
         ) : (
-          <p className="rounded-2xl bg-stadium p-3 text-sm font-bold text-[#10131a]/56">
-            Recent match history is not loaded yet.
-          </p>
+          <HistoryList history={team.history} />
         )}
       </div>
     </div>
   );
 }
 
-function SquadBlock({
+// ─── formation pitch ──────────────────────────────────────────────────────────
+
+function parseFormation(f: string): number[] {
+  // "4-3-3" → [1, 4, 3, 3]  (GK row prepended)
+  return [1, ...f.split("-").map(Number).filter((n) => !isNaN(n) && n > 0)];
+}
+
+function stripMinute(s: string) {
+  return s.replace(/\s+\d+(\+\d+)?'$/, "").trim();
+}
+
+function matchesEvent(playerName: string, eventTitle: string) {
+  const p = playerName.toLowerCase();
+  const e = stripMinute(eventTitle).toLowerCase();
+  return (
+    p.includes(e) ||
+    e.includes(p) ||
+    p.split(" ").some((part) => part.length > 2 && e.includes(part))
+  );
+}
+
+type Theme = ReturnType<typeof teamTheme>;
+
+function FormationPitch({
+  formation,
+  startingXi,
   squad,
   teamEvents,
   theme,
 }: {
+  formation: string;
+  startingXi: string[];
   squad: MatchCenterTeam["squad"];
   teamEvents: MatchEvent[];
-  theme: ReturnType<typeof teamTheme>;
+  theme: Theme;
 }) {
-  // Build per-player event map
+  const rows = parseFormation(formation);
   const goalEvents = teamEvents.filter(
     (e) => e.eventType === "goal" || e.eventType === "penalty_goal" || e.eventType === "own_goal",
   );
   const yellowEvents = teamEvents.filter((e) => e.eventType === "yellow_card");
   const redEvents = teamEvents.filter((e) => e.eventType === "red_card");
 
-  function playerGoals(name: string) {
-    return goalEvents.filter((e) => playerMatchesTitle(name, e.title)).length;
-  }
-  function hasYellow(name: string) {
-    return yellowEvents.some((e) => playerMatchesTitle(name, e.title));
-  }
-  function hasRed(name: string) {
-    return redEvents.some((e) => playerMatchesTitle(name, e.title));
-  }
+  // Assign starting XI to rows (GK first in startingXi)
+  let idx = 0;
+  const rowPlayers = rows.map((count) => {
+    const slice = startingXi.slice(idx, idx + count);
+    idx += count;
+    return slice;
+  });
 
-  // Find top scorer in this match for this team
-  const goalCounts = squad.map((p) => playerGoals(p.name));
+  // Find top scorer for highlight
+  const goalCounts = startingXi.map((name) =>
+    goalEvents.filter((e) => matchesEvent(name, e.title)).length,
+  );
   const maxGoals = Math.max(0, ...goalCounts);
 
+  // Shirt number lookup from squad
+  const shirtMap = new Map(
+    squad.map((p) => [p.name.toLowerCase(), p.shirtNumber]),
+  );
+  function shirtFor(name: string) {
+    const exact = shirtMap.get(name.toLowerCase());
+    if (exact !== undefined) return exact;
+    // Partial match
+    for (const [key, num] of shirtMap) {
+      if (key.includes(name.toLowerCase()) || name.toLowerCase().includes(key.split(" ").slice(-1)[0])) {
+        return num;
+      }
+    }
+    return null;
+  }
+
   return (
-    <div className="mt-5">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Users className="size-4 text-cobalt" />
-          <h3 className="text-xs font-black uppercase tracking-[0.18em] text-[#10131a]/58">
-            Players
-          </h3>
-        </div>
-        <span className="rounded-full bg-[#10131a]/5 px-2.5 py-1 text-[11px] font-black text-cobalt">
-          {squad.length}
-        </span>
-      </div>
+    <div
+      className="relative overflow-hidden rounded-2xl"
+      style={{ background: "linear-gradient(180deg, #1a4d2e 0%, #2a6b3f 50%, #1a4d2e 100%)" }}
+    >
+      {/* Pitch markings */}
+      <PitchMarkings />
 
-      <div className="max-h-[420px] space-y-1.5 overflow-y-auto pr-1">
-        {squad.length ? (
-          squad.map((player) => {
-            const goals = playerGoals(player.name);
-            const yellow = hasYellow(player.name);
-            const red = hasRed(player.name);
-            const isTopScorer = maxGoals > 0 && goals === maxGoals;
+      {/* Player rows — rendered bottom-to-top (GK at bottom, forwards at top) */}
+      <div className="relative z-10 flex flex-col-reverse gap-1 px-3 py-5">
+        {rowPlayers.map((players, rowIdx) => (
+          <div key={rowIdx} className="flex items-center justify-around py-2">
+            {players.map((name, i) => {
+              const goals = goalEvents.filter((e) => matchesEvent(name, e.title)).length;
+              const yellow = yellowEvents.some((e) => matchesEvent(name, e.title));
+              const red = redEvents.some((e) => matchesEvent(name, e.title));
+              const isTop = maxGoals > 0 && goals === maxGoals;
+              const shirt = shirtFor(name);
+              const lastName = name.split(" ").slice(-1)[0];
 
-            return (
-              <article
-                className="grid grid-cols-[34px_42px_1fr_auto] items-center gap-3 rounded-2xl border p-3 text-sm"
-                key={`${player.shirtNumber}-${player.name}`}
-                style={{
-                  background: isTopScorer
-                    ? `linear-gradient(135deg, rgba(250,204,21,0.18), ${teamThemeForHistory(theme)})`
-                    : goals > 0
-                    ? `linear-gradient(135deg, rgba(250,204,21,0.08), ${teamThemeForHistory(theme)})`
-                    : `linear-gradient(135deg, rgba(255,255,255,0.68), ${teamThemeForHistory(theme)})`,
-                  borderColor: isTopScorer ? "rgba(250,204,21,0.45)" : theme.ring,
-                }}
-              >
-                <span className="font-mono text-xs font-black text-cobalt">
-                  {player.shirtNumber ?? "--"}
-                </span>
-                <span
-                  className={`rounded-full px-2 py-1 text-center text-[11px] font-black ${playerRoleClass(
-                    player.positionCode,
-                    player.position,
-                  )}`}
-                >
-                  {player.positionCode}
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate font-black text-[#10131a]">{player.name}</span>
-                  <span className="block truncate text-xs font-bold text-[#10131a]/52">{player.club}</span>
-                </span>
-                {/* Event badges */}
-                <span className="flex shrink-0 items-center gap-1">
-                  {goals > 0 && (
-                    <span className="inline-flex items-center gap-0.5 text-sm leading-none">
-                      {"⚽".repeat(Math.min(goals, 3))}
-                      {goals > 3 && <span className="text-[10px] font-black text-[#10131a]/50">×{goals}</span>}
-                    </span>
-                  )}
-                  {yellow && <span className="text-base leading-none">🟨</span>}
-                  {red && <span className="text-base leading-none">🟥</span>}
-                </span>
-              </article>
-            );
-          })
-        ) : (
-          <p className="rounded-2xl bg-stadium p-3 text-sm font-bold text-[#10131a]/56">
-            Squad import has not been loaded for this team yet.
-          </p>
-        )}
+              return (
+                <div key={i} className="flex flex-col items-center gap-1" style={{ minWidth: 52 }}>
+                  <div className="relative">
+                    {/* Card badge top-left */}
+                    {(yellow || red) && (
+                      <span className="absolute -left-1 -top-1 z-10 text-[10px] leading-none">
+                        {red ? "🟥" : "🟨"}
+                      </span>
+                    )}
+                    {/* Goal badge top-right */}
+                    {goals > 0 && (
+                      <span className="absolute -right-1 -top-1 z-10 text-[10px] leading-none">
+                        {"⚽".repeat(Math.min(goals, 2))}
+                      </span>
+                    )}
+                    {/* Player circle */}
+                    <div
+                      className="flex size-10 items-center justify-center rounded-full text-xs font-black text-white shadow-md ring-2"
+                      style={{
+                        background: `linear-gradient(135deg, ${theme.dark}, ${theme.mid})`,
+                        outline: isTop ? "2px solid rgba(250,204,21,0.9)" : "2px solid rgba(255,255,255,0.3)",
+                      }}
+                    >
+                      {shirt ?? (rowIdx === 0 ? "GK" : "#")}
+                    </div>
+                  </div>
+                  <span className="max-w-[56px] truncate text-center text-[10px] font-black leading-none text-white drop-shadow">
+                    {lastName}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );
 }
+
+function PitchMarkings() {
+  return (
+    <div className="pointer-events-none absolute inset-0">
+      {/* Center line */}
+      <div className="absolute inset-x-4 top-1/2 h-px -translate-y-px bg-white/20" />
+      {/* Center circle */}
+      <div className="absolute left-1/2 top-1/2 size-14 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/20" />
+      {/* Top penalty box */}
+      <div className="absolute inset-x-8 top-3 h-10 rounded-sm border border-white/15" />
+      {/* Bottom penalty box */}
+      <div className="absolute inset-x-8 bottom-3 h-10 rounded-sm border border-white/15" />
+    </div>
+  );
+}
+
+// ─── squad fallback list ──────────────────────────────────────────────────────
+
+function SquadList({
+  squad,
+  teamEvents,
+  theme,
+}: {
+  squad: MatchCenterTeam["squad"];
+  teamEvents: MatchEvent[];
+  theme: Theme;
+}) {
+  const goalEvents = teamEvents.filter(
+    (e) => e.eventType === "goal" || e.eventType === "penalty_goal" || e.eventType === "own_goal",
+  );
+  const yellowEvents = teamEvents.filter((e) => e.eventType === "yellow_card");
+  const redEvents = teamEvents.filter((e) => e.eventType === "red_card");
+
+  const goalCounts = squad.map((p) =>
+    goalEvents.filter((e) => matchesEvent(p.name, e.title)).length,
+  );
+  const maxGoals = Math.max(0, ...goalCounts);
+
+  if (!squad.length) {
+    return (
+      <p className="rounded-2xl bg-stadium p-3 text-sm font-bold text-[#10131a]/56">
+        Squad data not loaded yet.
+      </p>
+    );
+  }
+
+  return (
+    <div className="max-h-[400px] space-y-1.5 overflow-y-auto pr-1">
+      {squad.map((player, i) => {
+        const goals = goalCounts[i];
+        const yellow = yellowEvents.some((e) => matchesEvent(player.name, e.title));
+        const red = redEvents.some((e) => matchesEvent(player.name, e.title));
+        const isTop = maxGoals > 0 && goals === maxGoals;
+
+        return (
+          <article
+            key={`${player.shirtNumber}-${player.name}`}
+            className="grid grid-cols-[32px_40px_1fr_auto] items-center gap-2.5 rounded-2xl border p-2.5 text-sm"
+            style={{
+              background: isTop
+                ? "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(255,255,255,0.9))"
+                : goals > 0
+                ? "linear-gradient(135deg, rgba(250,204,21,0.07), rgba(255,255,255,0.92))"
+                : "rgba(255,255,255,0.7)",
+              borderColor: isTop ? "rgba(250,204,21,0.45)" : theme.ring,
+            }}
+          >
+            <span className="font-mono text-xs font-black text-cobalt">
+              {player.shirtNumber ?? "--"}
+            </span>
+            <span className={`rounded-full px-1.5 py-0.5 text-center text-[10px] font-black ${playerRoleClass(player.positionCode, player.position)}`}>
+              {player.positionCode}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-black text-[#10131a]">{player.name}</span>
+              <span className="block truncate text-[11px] font-bold text-[#10131a]/48">{player.club}</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-0.5 text-sm leading-none">
+              {goals > 0 && "⚽".repeat(Math.min(goals, 3))}
+              {yellow && "🟨"}
+              {red && "🟥"}
+            </span>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── history list ─────────────────────────────────────────────────────────────
+
+function HistoryList({ history }: { history: RecentTeamMatch[] }) {
+  const recent = history.slice(0, 4);
+
+  if (!recent.length) {
+    return (
+      <p className="rounded-2xl bg-stadium p-3 text-sm font-bold text-[#10131a]/56">
+        Recent match history not loaded yet.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="mb-3 flex items-center gap-2">
+        <Shield className="size-4 text-cobalt" />
+        <span className="text-xs font-black uppercase tracking-[0.18em] text-[#10131a]/55">
+          Last {recent.length} matches
+        </span>
+      </div>
+      {recent.map((match) => (
+        <article
+          key={`${match.date}-${match.home}-${match.away}`}
+          className="flex items-center justify-between gap-3 rounded-2xl border border-[#10131a]/8 bg-stadium p-3"
+        >
+          <div className="min-w-0">
+            <p className="text-[10px] font-black text-[#10131a]/45">
+              {match.date} · {match.competition}
+            </p>
+            <p className="mt-0.5 truncate text-sm font-black text-[#10131a]">
+              {match.home} {match.homeScore}–{match.awayScore} {match.away}
+            </p>
+            {match.goals.length > 0 && (
+              <p className="mt-0.5 truncate text-[11px] font-bold text-[#10131a]/50">
+                {match.goals.map((g) => `${g.scorer}${g.minute ? ` ${g.minute}'` : ""}`).join(", ")}
+              </p>
+            )}
+          </div>
+          <span className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-black ${resultClass(match.result)}`}>
+            {match.result}
+          </span>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
 
 function teamTheme(slug: string) {
   const themes: Record<string, { dark: string; mid: string; ring: string; soft: string }> = {
@@ -282,15 +416,10 @@ function teamTheme(slug: string) {
   return themes[slug] ?? { dark: "#10131a", mid: "#0b5cff", ring: "rgba(11,92,255,0.18)", soft: "rgba(11,92,255,0.09)" };
 }
 
-function teamThemeForHistory(theme: ReturnType<typeof teamTheme>) {
-  return theme.soft.replace(/0\.\d+\)/, "0.2)");
-}
-
 function playerRoleClass(code: string, position: string) {
   const label = `${code} ${position}`.toLowerCase();
   if (label.includes("gk") || label.includes("goal")) return "bg-amber-200 text-amber-950";
-  if (label.includes("fw") || label.includes("forward") || label.includes("striker") || label.includes("wing"))
-    return "bg-red-100 text-red-800";
+  if (label.includes("fw") || label.includes("forward") || label.includes("striker") || label.includes("wing")) return "bg-red-100 text-red-800";
   if (label.includes("mf") || label.includes("mid")) return "bg-sky-100 text-sky-800";
   if (label.includes("df") || label.includes("def")) return "bg-emerald-100 text-emerald-800";
   return "bg-white text-[#10131a]/62";

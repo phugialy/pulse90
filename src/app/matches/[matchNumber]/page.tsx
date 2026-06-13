@@ -32,104 +32,126 @@ export default async function MatchPage({
   return (
     <AppShell>
       <LiveRefresh isLive={match.status === "live"} />
-      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8">
-        <section className="min-w-0 space-y-5">
-          <PageIntro
-            kicker={`${match.group} / Match #${match.matchNumber}`}
-            title={`${match.home} ${match.score ?? "vs"} ${match.away}`}
-            detail={match.stakes}
-          />
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        {/* Main 2-column grid */}
+        <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+          <section className="min-w-0 space-y-5">
+            <PageIntro
+              kicker={`${match.group} / Match #${match.matchNumber}`}
+              title={`${match.home} ${match.score ?? "vs"} ${match.away}`}
+              detail={match.stakes}
+            />
 
-          <section
-            className="overflow-hidden rounded-[28px] border border-[#10131a]/10 bg-white p-5 shadow-sm sm:p-6"
-            style={{
-              background: matchBackdrop(
-                homeTeam?.slug ?? match.homeSlug,
-                awayTeam?.slug ?? match.awaySlug,
-              ),
-            }}
-          >
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-              <MatchTeamFace
-                flagAssetUrl={homeTeam?.flagAssetUrl ?? match.homeFlagAssetUrl}
-                flagEmoji={homeTeam?.flagEmoji ?? match.homeFlagEmoji}
-                name={match.home}
-                slug={homeTeam?.slug ?? match.homeSlug}
-              />
-              <span className="text-center text-2xl font-black text-cobalt sm:text-4xl">
-                {match.score ?? "vs"}
-              </span>
-              <MatchTeamFace
-                align="right"
-                flagAssetUrl={awayTeam?.flagAssetUrl ?? match.awayFlagAssetUrl}
-                flagEmoji={awayTeam?.flagEmoji ?? match.awayFlagEmoji}
-                name={match.away}
-                slug={awayTeam?.slug ?? match.awaySlug}
-              />
-            </div>
+            <section
+              className="overflow-hidden rounded-[28px] border border-[#10131a]/10 bg-white p-5 shadow-sm sm:p-6"
+              style={{
+                background: matchBackdrop(
+                  homeTeam?.slug ?? match.homeSlug,
+                  awayTeam?.slug ?? match.awaySlug,
+                ),
+              }}
+            >
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                <MatchTeamFace
+                  flagAssetUrl={homeTeam?.flagAssetUrl ?? match.homeFlagAssetUrl}
+                  flagEmoji={homeTeam?.flagEmoji ?? match.homeFlagEmoji}
+                  name={match.home}
+                  slug={homeTeam?.slug ?? match.homeSlug}
+                />
+                <span className="text-center text-2xl font-black text-cobalt sm:text-4xl">
+                  {match.score ?? "vs"}
+                </span>
+                <MatchTeamFace
+                  align="right"
+                  flagAssetUrl={awayTeam?.flagAssetUrl ?? match.awayFlagAssetUrl}
+                  flagEmoji={awayTeam?.flagEmoji ?? match.awayFlagEmoji}
+                  name={match.away}
+                  slug={awayTeam?.slug ?? match.awaySlug}
+                />
+              </div>
 
-            <div className="mt-6 flex flex-wrap gap-2">
-              {match.date ? <StatusPill icon={CalendarDays}>{match.date}</StatusPill> : null}
-              <StatusPill icon={Clock3}>
-                {match.status === "completed" ? "FT" : (match.minute ?? match.time)}
-              </StatusPill>
-              <StatusPill icon={Trophy}>{formatStage(match.stage)}</StatusPill>
-              <StatusPill icon={MapPin}>{match.venue}</StatusPill>
-              <StatusPill icon={MapPin}>{match.place}</StatusPill>
-            </div>
+              <div className="mt-6 flex flex-wrap gap-2">
+                {match.date ? <StatusPill icon={CalendarDays}>{match.date}</StatusPill> : null}
+                <StatusPill icon={Clock3}>
+                  {match.status === "completed" ? "FT" : (match.minute ?? match.time)}
+                </StatusPill>
+                <StatusPill icon={Trophy}>{formatStage(match.stage)}</StatusPill>
+                <StatusPill icon={MapPin}>{match.venue}</StatusPill>
+                <StatusPill icon={MapPin}>{match.place}</StatusPill>
+              </div>
 
-            <div className="mt-6 rounded-2xl bg-white/82 p-4 shadow-sm backdrop-blur">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-cobalt">
-                Fixture note
-              </p>
-              <p className="mt-2 text-xl font-black leading-tight text-[#10131a]">
-                {match.implication}
-              </p>
-            </div>
+              <div className="mt-6 rounded-2xl bg-white/82 p-4 shadow-sm backdrop-blur">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-cobalt">
+                  Fixture note
+                </p>
+                <p className="mt-2 text-xl font-black leading-tight text-[#10131a]">
+                  {match.implication}
+                </p>
+              </div>
 
-            {(predictions.matchWinner || predictions.goalScorers.length > 0) && match.status !== "completed" && (
-              <div className="mt-4 flex items-start gap-3 rounded-2xl bg-cobalt px-4 py-3">
-                <Sparkles className="mt-0.5 size-4 shrink-0 text-white/70" />
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    {predictions.matchWinner && (
-                      <span className="text-base font-black text-white">
-                        Our call: {predictions.matchWinner}
-                      </span>
-                    )}
-                    {predictions.goalScorers.length > 0 && (
-                      <span className="text-sm font-bold text-white/70">
-                        Top players: {predictions.goalScorers.slice(0, 2).map((p) => p.label).join(" · ")}
-                      </span>
-                    )}
+              {(predictions.matchWinner || predictions.goalScorers.length > 0) && match.status !== "completed" && (
+                <div className="mt-4 flex items-start gap-3 rounded-2xl bg-cobalt px-4 py-3">
+                  <Sparkles className="mt-0.5 size-4 shrink-0 text-white/70" />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      {predictions.matchWinner && (
+                        <span className="text-base font-black text-white">
+                          Our call: {predictions.matchWinner}
+                        </span>
+                      )}
+                      {predictions.goalScorers.length > 0 && (
+                        <span className="text-sm font-bold text-white/70">
+                          Top players: {predictions.goalScorers.slice(0, 2).map((p) => p.label).join(" · ")}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
+            </section>
+
+            {fixtureId && homeTeamId && awayTeamId && (
+              <WhoWinsVote
+                awayFlagEmoji={awayTeam?.flagEmoji ?? match.awayFlagEmoji}
+                awayName={match.away}
+                awayTeamId={awayTeamId}
+                fixtureId={fixtureId}
+                homeFlagEmoji={homeTeam?.flagEmoji ?? match.homeFlagEmoji}
+                homeName={match.home}
+                homeTeamId={homeTeamId}
+                initialTally={voteTally}
+                status={match.status}
+              />
+            )}
+
+            {events.length > 0 && (
+              <EventTimeline
+                events={events}
+                homeTeamId={homeTeamId}
+                awayTeamId={awayTeamId}
+              />
             )}
           </section>
 
-          {fixtureId && homeTeamId && awayTeamId && (
-            <WhoWinsVote
-              awayFlagEmoji={awayTeam?.flagEmoji ?? match.awayFlagEmoji}
-              awayName={match.away}
-              awayTeamId={awayTeamId}
-              fixtureId={fixtureId}
-              homeFlagEmoji={homeTeam?.flagEmoji ?? match.homeFlagEmoji}
-              homeName={match.home}
-              homeTeamId={homeTeamId}
-              initialTally={voteTally}
-              status={match.status}
-            />
-          )}
+          <aside className="min-w-0 space-y-5">
+            {match.status === "live" && <WhereToWatch />}
+            <GroupTable group={match.group} rows={groupTable} />
+            <section className="rounded-[24px] border border-lime-200/20 bg-lime-300 p-5 text-black">
+              <p className="text-sm font-black uppercase tracking-[0.18em]">
+                Why it matters
+              </p>
+              <p className="mt-4 text-2xl font-black leading-tight">
+                {match.reason}
+              </p>
+            </section>
+            {(predictions.matchWinner || predictions.goalScorers.length > 0 || predictions.cardWatch.length > 0) && (
+              <MatchPredictionsPanel events={events} predictions={predictions} status={match.status} />
+            )}
+          </aside>
+        </div>
 
-          {events.length > 0 && (
-            <EventTimeline
-              events={events}
-              homeTeamId={homeTeamId}
-              awayTeamId={awayTeamId}
-            />
-          )}
-
+        {/* Full-width team lineup / formation section */}
+        <div className="mt-5">
           <MatchTeamTabs
             awayTeam={awayTeam}
             awayTeamId={awayTeamId}
@@ -137,23 +159,7 @@ export default async function MatchPage({
             homeTeam={homeTeam}
             homeTeamId={homeTeamId}
           />
-        </section>
-
-        <aside className="min-w-0 space-y-5">
-          {match.status === "live" && <WhereToWatch />}
-          <GroupTable group={match.group} rows={groupTable} />
-          <section className="rounded-[24px] border border-lime-200/20 bg-lime-300 p-5 text-black">
-            <p className="text-sm font-black uppercase tracking-[0.18em]">
-              Why it matters
-            </p>
-            <p className="mt-4 text-2xl font-black leading-tight">
-              {match.reason}
-            </p>
-          </section>
-          {(predictions.matchWinner || predictions.goalScorers.length > 0 || predictions.cardWatch.length > 0) && (
-            <MatchPredictionsPanel events={events} predictions={predictions} status={match.status} />
-          )}
-        </aside>
+        </div>
       </div>
     </AppShell>
   );

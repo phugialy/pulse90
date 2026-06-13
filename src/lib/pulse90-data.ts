@@ -140,6 +140,7 @@ export type MatchCenterTeam = {
   flagAssetUrl: string | null;
   flagEmoji: string;
   formation?: string;
+  startingXi?: string[];
   group: string;
   history: RecentTeamMatch[];
   name: string;
@@ -1128,7 +1129,7 @@ export async function getMatchCenter(matchNumber: string) {
       .order("probability", { ascending: false }),
     supabase
       .from("fixture_lineups")
-      .select("team_id, formation")
+      .select("team_id, formation, starting_xi")
       .eq("fixture_id", fixture.id),
   ]);
   const teamRows = teamsResult.error ? [] : (teamsResult.data as MatchCenterTeamRow[]);
@@ -1150,15 +1151,17 @@ export async function getMatchCenter(matchNumber: string) {
     getVoteTally(supabase, fixture.id, homeTeamRow?.id ?? null, awayTeamRow?.id ?? null),
   ]);
 
-  type LineupRow = { team_id: string; formation: string | null };
+  type LineupRow = { team_id: string; formation: string | null; starting_xi: string[] | null };
   const lineups = (lineupsResult.data ?? []) as LineupRow[];
   if (homeTeam) {
     const l = lineups.find((r) => r.team_id === homeTeamRow?.id);
     if (l?.formation) homeTeam.formation = l.formation;
+    if (l?.starting_xi?.length) homeTeam.startingXi = l.starting_xi;
   }
   if (awayTeam) {
     const l = lineups.find((r) => r.team_id === awayTeamRow?.id);
     if (l?.formation) awayTeam.formation = l.formation;
+    if (l?.starting_xi?.length) awayTeam.startingXi = l.starting_xi;
   }
   const groupTable = groupResult.error
     ? []
