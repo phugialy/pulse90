@@ -648,6 +648,12 @@ export function ShareCardSeed() {
   );
 }
 
+function parseScore(score: string | undefined): { home: number; away: number } | null {
+  if (!score) return null;
+  const [h, a] = score.split("-").map(Number);
+  return isNaN(h) || isNaN(a) ? null : { home: h, away: a };
+}
+
 export function ResultsRibbon({ matches }: { matches: Match[] }) {
   if (!matches.length) return null;
 
@@ -666,36 +672,44 @@ export function ResultsRibbon({ matches }: { matches: Match[] }) {
       </div>
 
       <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:-mx-5 sm:px-5">
-        {matches.map((match) => (
-          <Link
-            key={match.matchNumber}
-            href={`/matches/${match.matchNumber}`}
-            className="flex shrink-0 items-center gap-3 rounded-2xl border border-[#10131a]/10 bg-stadium px-4 py-3 transition hover:border-cobalt/40"
-          >
-            <span className="flex items-center gap-2 text-sm font-black text-[#10131a]">
-              <FlagImg
-                src={match.homeFlagAssetUrl}
-                emoji={match.homeFlagEmoji}
-                alt={match.home}
-              />
-              {match.home}
-            </span>
-            <span className="px-1 text-xl font-black tabular-nums text-cobalt">
-              {match.score}
-            </span>
-            <span className="flex items-center gap-2 text-sm font-black text-[#10131a]">
-              {match.away}
-              <FlagImg
-                src={match.awayFlagAssetUrl}
-                emoji={match.awayFlagEmoji}
-                alt={match.away}
-              />
-            </span>
-            <span className="ml-1 rounded-full bg-[#10131a]/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-[#10131a]/55">
-              {match.group} · FT
-            </span>
-          </Link>
-        ))}
+        {matches.map((match) => {
+          const s = parseScore(match.score);
+          const homeWon = s ? s.home > s.away : false;
+          const awayWon = s ? s.away > s.home : false;
+
+          return (
+            <Link
+              key={match.matchNumber}
+              href={`/matches/${match.matchNumber}`}
+              className="group flex shrink-0 flex-col gap-2 rounded-2xl border border-[#10131a]/10 bg-stadium px-4 py-3 transition hover:border-cobalt/40 hover:shadow-sm min-w-[220px]"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#10131a]/40">
+                  {match.group}
+                </span>
+                <span className="rounded-full bg-[#10131a]/6 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-[#10131a]/45">
+                  FT
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className={`flex min-w-0 flex-1 items-center gap-1.5 text-sm font-black ${homeWon ? "text-[#10131a]" : awayWon ? "text-[#10131a]/30" : "text-[#10131a]/70"}`}>
+                  <FlagImg src={match.homeFlagAssetUrl} emoji={match.homeFlagEmoji} alt={match.home} />
+                  <span className="truncate">{match.home}</span>
+                </span>
+
+                <span className="shrink-0 text-xl font-black tabular-nums text-cobalt">
+                  {match.score}
+                </span>
+
+                <span className={`flex min-w-0 flex-1 items-center justify-end gap-1.5 text-sm font-black ${awayWon ? "text-[#10131a]" : homeWon ? "text-[#10131a]/30" : "text-[#10131a]/70"}`}>
+                  <span className="truncate">{match.away}</span>
+                  <FlagImg src={match.awayFlagAssetUrl} emoji={match.awayFlagEmoji} alt={match.away} />
+                </span>
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </section>
   );

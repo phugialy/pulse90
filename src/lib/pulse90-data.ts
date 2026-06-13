@@ -704,7 +704,7 @@ export async function getTodayDashboard() {
   const rawRows = fixturesResult.data as FixtureCardRow[];
   const allMapped = rawRows.map((row) => mapFixture(row, teamFlags));
 
-  const results = allMapped.filter((m) => m.status === "completed");
+  const results = allMapped.filter((m) => m.status === "completed").reverse();
   const mappedLive = allMapped.filter((m) => m.status === "live");
   const upcoming = allMapped.filter((m) => m.status !== "completed");
 
