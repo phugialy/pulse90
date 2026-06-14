@@ -84,19 +84,36 @@ const PRE_MATCH_MINUTES = 5;
 // ---------------------------------------------------------------------------
 
 async function fetchEspnScores(): Promise<EspnEvent[]> {
-  const url =
-    "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "pulse90-sync/1.0" },
-      cache: "no-store",
-    });
-    if (!res.ok) return [];
-    const data = (await res.json()) as { events?: EspnEvent[] };
-    return data.events ?? [];
-  } catch {
-    return [];
+  const base = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
+
+  // Fetch today + yesterday so recently-finished matches aren't missed when ESPN
+  // removes them from the live scoreboard before our cron marks them completed.
+  const today = new Date();
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const fmt = (d: Date) =>
+    `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
+
+  const urls = [`${base}?dates=${fmt(today)}`, `${base}?dates=${fmt(yesterday)}`];
+
+  const results = await Promise.allSettled(
+    urls.map((url) =>
+      fetch(url, { headers: { "User-Agent": "pulse90-sync/1.0" }, cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : { events: [] }))
+        .then((d: { events?: EspnEvent[] }) => d.events ?? [])
+        .catch(() => [] as EspnEvent[]),
+    ),
+  );
+
+  const seen = new Set<string>();
+  const events: EspnEvent[] = [];
+  for (const r of results) {
+    if (r.status === "fulfilled") {
+      for (const e of r.value) {
+        if (!seen.has(e.id)) { seen.add(e.id); events.push(e); }
+      }
+    }
   }
+  return events;
 }
 
 // ---------------------------------------------------------------------------
@@ -450,6 +467,28 @@ export async function GET(request: NextRequest) {
         }
       }
     }
+  }
+
+  // ------------------------------------------------------------------
+  // Auto-complete stuck "live" fixtures ESPN has already removed from feed
+  // 90 min game + 15 min break + ~10 min stoppage + 15 min buffer = 130 min
+  // ------------------------------------------------------------------
+  const autoCompleteMs = 130 * 60 * 1000;
+  const stuckLive = windowFixtures.filter(
+    (f) => f.status === "live" && new Date(f.starts_at).getTime() + autoCompleteMs < now.getTime(),
+  );
+  for (const fixture of stuckLive) {
+    await supabase
+      .from("fixtures")
+      .update({ status: "completed", updated_at: now.toISOString() })
+      .eq("id", fixture.id);
+    updated.push({
+      matchNumber: fixture.match_number,
+      home: fixture.home_score,
+      away: fixture.away_score,
+      status: "completed",
+      minute: fixture.minute,
+    });
   }
 
   // ------------------------------------------------------------------
