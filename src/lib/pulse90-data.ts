@@ -720,7 +720,13 @@ export async function getTodayDashboard() {
   const results = (completedResult.data ?? []).map((row) =>
     mapFixture(row as FixtureCardRow, teamFlags),
   );
-  const mappedLive = allMapped.filter((m) => m.status === "live");
+
+  // Auto-expire stuck "live" rows: 90 min + 15 break + 30 extra time + 15 min buffer = 2.5 hrs.
+  // If status hasn't flipped to "completed" within that window, hide it from live view.
+  const twoHalfHoursAgo = new Date(Date.now() - 2.5 * 60 * 60 * 1000);
+  const mappedLive = allMapped.filter(
+    (m) => m.status === "live" && new Date(rawRows.find((r) => r.id === m.fixtureId)?.starts_at ?? 0) > twoHalfHoursAgo,
+  );
   const upcoming = allMapped;
 
   // Tomorrow's watch windows: first 4 scheduled fixtures that start after today (UTC)
@@ -805,22 +811,48 @@ export async function getTodayDashboard() {
       .filter((m) => m.fixtureId)
       .map((m) => {
         const row = rawRows.find((r) => r.id === m.fixtureId);
+        const events = eventsByFixture.get(m.fixtureId!) ?? [];
+
+        // Derive score from events — DB home_score/away_score may not update during live
+        const homeId = m.homeTeamId ?? null;
+        const awayId = m.awayTeamId ?? null;
+        const computedHomeScore = events.filter((e) =>
+          (["goal", "penalty_goal"].includes(e.eventType) && e.teamId === homeId) ||
+          (e.eventType === "own_goal" && e.teamId === awayId),
+        ).length;
+        const computedAwayScore = events.filter((e) =>
+          (["goal", "penalty_goal"].includes(e.eventType) && e.teamId === awayId) ||
+          (e.eventType === "own_goal" && e.teamId === homeId),
+        ).length;
+
+        // Fall back to DB score if no events yet (kick-off, 0-0 before first event)
+        const dbHomeScore = row?.home_score ?? null;
+        const dbAwayScore = row?.away_score ?? null;
+        const hasDbScore = dbHomeScore !== null && dbAwayScore !== null;
+        const hasEvents = events.some((e) => ["goal", "penalty_goal", "own_goal"].includes(e.eventType));
+
+        const homeScore = hasEvents ? computedHomeScore : (hasDbScore ? dbHomeScore : 0);
+        const awayScore = hasEvents ? computedAwayScore : (hasDbScore ? dbAwayScore : 0);
+
+        // Patch the score string back onto the live Match object so PriorityMatch is in sync
+        m.score = `${homeScore}–${awayScore}`;
+
         return {
           fixtureId: m.fixtureId!,
           matchNumber: m.matchNumber,
           home: m.home,
           away: m.away,
-          homeScore: row?.home_score ?? null,
-          awayScore: row?.away_score ?? null,
+          homeScore,
+          awayScore,
           minute: m.minute ?? null,
           group: m.group,
           homeFlagEmoji: m.homeFlagEmoji ?? "🏳",
           homeFlagAssetUrl: m.homeFlagAssetUrl ?? null,
           awayFlagEmoji: m.awayFlagEmoji ?? "🏳",
           awayFlagAssetUrl: m.awayFlagAssetUrl ?? null,
-          homeTeamId: m.homeTeamId ?? null,
-          awayTeamId: m.awayTeamId ?? null,
-          events: eventsByFixture.get(m.fixtureId!) ?? [],
+          homeTeamId: homeId,
+          awayTeamId: awayId,
+          events,
         };
       });
   }

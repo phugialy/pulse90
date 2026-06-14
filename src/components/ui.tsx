@@ -382,7 +382,9 @@ function LiveBoardCard({ match }: { match: LiveBoardMatch }) {
   const cards = match.events.filter((e) =>
     e.eventType === "yellow_card" || e.eventType === "red_card",
   );
-  const hasScore = match.homeScore !== null && match.awayScore !== null;
+  // Score is always a number now (computed from events in data layer, 0 if no goals yet)
+  const homeScore = match.homeScore ?? 0;
+  const awayScore = match.awayScore ?? 0;
 
   return (
     <div className="px-5 py-4">
@@ -409,8 +411,8 @@ function LiveBoardCard({ match }: { match: LiveBoardMatch }) {
           </span>
           <span className="truncate text-base font-black text-white">{match.home}</span>
         </div>
-        <span className={`text-3xl font-black tabular-nums ${hasScore ? "text-red-400 drop-shadow-[0_0_12px_rgba(248,113,113,0.5)]" : "text-white/30"}`}>
-          {hasScore ? `${match.homeScore} – ${match.awayScore}` : "– –"}
+        <span className="text-3xl font-black tabular-nums text-red-400 drop-shadow-[0_0_12px_rgba(248,113,113,0.5)]">
+          {homeScore} – {awayScore}
         </span>
         <div className="flex items-center justify-end gap-2.5">
           <span className="truncate text-right text-base font-black text-white">{match.away}</span>
