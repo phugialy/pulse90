@@ -725,10 +725,13 @@ export async function getTodayDashboard() {
   // Add a 15 min grace window → 130 min (2h10m). Anything older is treated as finished.
   const liveExpiryMs = 130 * 60 * 1000;
   const liveExpiryThreshold = new Date(Date.now() - liveExpiryMs);
-  const mappedLive = allMapped.filter(
-    (m) => m.status === "live" && new Date(rawRows.find((r) => r.id === m.fixtureId)?.starts_at ?? 0) > liveExpiryThreshold,
-  );
-  const upcoming = allMapped;
+  const isExpiredLive = (m: ReturnType<typeof mapFixture>) =>
+    m.status === "live" &&
+    new Date(rawRows.find((r) => r.id === m.fixtureId)?.starts_at ?? 0) <= liveExpiryThreshold;
+
+  const mappedLive = allMapped.filter((m) => m.status === "live" && !isExpiredLive(m));
+  // Strip expired-live matches from upcoming too — otherwise PriorityMatch falls back to them
+  const upcoming = allMapped.filter((m) => !isExpiredLive(m));
 
   // Tomorrow's watch windows: first 4 scheduled fixtures that start after today (UTC)
   const endOfTodayUtc = new Date();
