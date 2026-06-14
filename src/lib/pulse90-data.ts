@@ -721,11 +721,12 @@ export async function getTodayDashboard() {
     mapFixture(row as FixtureCardRow, teamFlags),
   );
 
-  // Auto-expire stuck "live" rows: 90 min + 15 break + 30 extra time + 15 min buffer = 2.5 hrs.
-  // If status hasn't flipped to "completed" within that window, hide it from live view.
-  const twoHalfHoursAgo = new Date(Date.now() - 2.5 * 60 * 60 * 1000);
+  // Auto-expire stuck "live" rows: 90 min game + 15 min half-time + ~10 min stoppage = ~115 min.
+  // Add a 15 min grace window → 130 min (2h10m). Anything older is treated as finished.
+  const liveExpiryMs = 130 * 60 * 1000;
+  const liveExpiryThreshold = new Date(Date.now() - liveExpiryMs);
   const mappedLive = allMapped.filter(
-    (m) => m.status === "live" && new Date(rawRows.find((r) => r.id === m.fixtureId)?.starts_at ?? 0) > twoHalfHoursAgo,
+    (m) => m.status === "live" && new Date(rawRows.find((r) => r.id === m.fixtureId)?.starts_at ?? 0) > liveExpiryThreshold,
   );
   const upcoming = allMapped;
 
@@ -813,26 +814,26 @@ export async function getTodayDashboard() {
         const row = rawRows.find((r) => r.id === m.fixtureId);
         const events = eventsByFixture.get(m.fixtureId!) ?? [];
 
-        // Derive score from events — DB home_score/away_score may not update during live
         const homeId = m.homeTeamId ?? null;
         const awayId = m.awayTeamId ?? null;
-        const computedHomeScore = events.filter((e) =>
+
+        // Prefer DB score — the API keeps home_score/away_score current during live play.
+        // Fall back to counting goal events when the DB columns are still null (first few seconds).
+        const dbHomeScore = row?.home_score ?? null;
+        const dbAwayScore = row?.away_score ?? null;
+        const hasDbScore = dbHomeScore !== null && dbAwayScore !== null;
+
+        const eventHomeScore = events.filter((e) =>
           (["goal", "penalty_goal"].includes(e.eventType) && e.teamId === homeId) ||
           (e.eventType === "own_goal" && e.teamId === awayId),
         ).length;
-        const computedAwayScore = events.filter((e) =>
+        const eventAwayScore = events.filter((e) =>
           (["goal", "penalty_goal"].includes(e.eventType) && e.teamId === awayId) ||
           (e.eventType === "own_goal" && e.teamId === homeId),
         ).length;
 
-        // Fall back to DB score if no events yet (kick-off, 0-0 before first event)
-        const dbHomeScore = row?.home_score ?? null;
-        const dbAwayScore = row?.away_score ?? null;
-        const hasDbScore = dbHomeScore !== null && dbAwayScore !== null;
-        const hasEvents = events.some((e) => ["goal", "penalty_goal", "own_goal"].includes(e.eventType));
-
-        const homeScore = hasEvents ? computedHomeScore : (hasDbScore ? dbHomeScore : 0);
-        const awayScore = hasEvents ? computedAwayScore : (hasDbScore ? dbAwayScore : 0);
+        const homeScore = hasDbScore ? dbHomeScore : eventHomeScore;
+        const awayScore = hasDbScore ? dbAwayScore : eventAwayScore;
 
         // Patch the score string back onto the live Match object so PriorityMatch is in sync
         m.score = `${homeScore}–${awayScore}`;
