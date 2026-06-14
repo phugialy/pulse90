@@ -27,7 +27,7 @@ import {
   type Prediction,
   type Team,
 } from "@/lib/mock-data";
-import type { ActiveGroup } from "@/lib/pulse90-data";
+import type { ActiveGroup, LiveBoardMatch } from "@/lib/pulse90-data";
 
 function FlagImg({
   src,
@@ -341,6 +341,130 @@ export function LiveStack({ matches = liveMatches }: { matches?: Match[] }) {
         ))}
       </div>
     </section>
+  );
+}
+
+// ─── Live Match Board ─────────────────────────────────────────────────────────
+
+export function LiveMatchBoard({ matches }: { matches: LiveBoardMatch[] }) {
+  if (!matches.length) return null;
+
+  return (
+    <section className="overflow-hidden rounded-[28px] bg-[#10131a] text-white shadow-[0_0_0_2px_rgba(239,68,68,0.55),0_0_60px_rgba(239,68,68,0.15)]">
+      {/* Header bar */}
+      <div className="flex items-center justify-between gap-3 bg-red-600 px-5 py-3">
+        <div className="flex items-center gap-2.5">
+          <span className="relative flex size-2.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+            <span className="relative inline-flex size-2.5 rounded-full bg-white" />
+          </span>
+          <span className="text-xs font-black uppercase tracking-[0.22em] text-white">
+            Live now — {matches.length} {matches.length === 1 ? "match" : "matches"} in play
+          </span>
+        </div>
+        <Radio className="size-4 text-white/70" />
+      </div>
+
+      {/* Match cards */}
+      <div className="divide-y divide-white/8">
+        {matches.map((m) => (
+          <LiveBoardCard key={m.fixtureId} match={m} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function LiveBoardCard({ match }: { match: LiveBoardMatch }) {
+  const goals = match.events.filter((e) =>
+    e.eventType === "goal" || e.eventType === "penalty_goal" || e.eventType === "own_goal",
+  );
+  const cards = match.events.filter((e) =>
+    e.eventType === "yellow_card" || e.eventType === "red_card",
+  );
+  const hasScore = match.homeScore !== null && match.awayScore !== null;
+
+  return (
+    <div className="px-5 py-4">
+      {/* Match meta */}
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">
+          {match.group}
+        </span>
+        <span className="rounded-full bg-red-600/80 px-2.5 py-1 text-[10px] font-black text-white tabular-nums">
+          {match.minute ?? "LIVE"}
+        </span>
+      </div>
+
+      {/* Teams + score */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-white/8">
+            {match.homeFlagAssetUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={match.homeFlagAssetUrl} alt={match.home} className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-xl">{match.homeFlagEmoji}</span>
+            )}
+          </span>
+          <span className="truncate text-base font-black text-white">{match.home}</span>
+        </div>
+        <span className={`text-3xl font-black tabular-nums ${hasScore ? "text-red-400 drop-shadow-[0_0_12px_rgba(248,113,113,0.5)]" : "text-white/30"}`}>
+          {hasScore ? `${match.homeScore} – ${match.awayScore}` : "– –"}
+        </span>
+        <div className="flex items-center justify-end gap-2.5">
+          <span className="truncate text-right text-base font-black text-white">{match.away}</span>
+          <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-white/8">
+            {match.awayFlagAssetUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={match.awayFlagAssetUrl} alt={match.away} className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-xl">{match.awayFlagEmoji}</span>
+            )}
+          </span>
+        </div>
+      </div>
+
+      {/* Event log */}
+      {(goals.length > 0 || cards.length > 0) && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {goals.map((ev, i) => (
+            <span key={i} className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold text-white/80">
+              <span>{ev.eventType === "own_goal" ? "⚽ OG" : "⚽"}</span>
+              <span>{ev.title.replace(/\s+\d+(\+\d+)?'$/, "")}</span>
+              {ev.minute && <span className="text-white/45">{ev.minute}{ev.stoppageMinute ? `+${ev.stoppageMinute}` : ""}'</span>}
+              {ev.eventType === "penalty_goal" && <span className="text-cobalt">(pen)</span>}
+            </span>
+          ))}
+          {cards.map((ev, i) => (
+            <span key={i} className="inline-flex items-center gap-1 rounded-full bg-white/8 px-2.5 py-1 text-xs font-bold text-white/60">
+              <span>{ev.eventType === "red_card" ? "🟥" : "🟨"}</span>
+              <span>{ev.title.replace(/\s+\d+(\+\d+)?'$/, "")}</span>
+              {ev.minute && <span className="text-white/40">{ev.minute}'</span>}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* CTA */}
+      <div className="mt-3 flex gap-2">
+        <Link
+          href={`/matches/${match.matchNumber}`}
+          className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-black text-white/80 transition hover:bg-white/20"
+        >
+          Match center <ArrowUpRight className="size-3.5" />
+        </Link>
+        <a
+          href="https://www.fifa.com/fifaplus/en/tournaments/mens/worldcup/canadamexicousa2026"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1.5 text-xs font-black text-white transition hover:bg-red-700"
+        >
+          <Tv className="size-3" />
+          Watch live
+        </a>
+      </div>
+    </div>
   );
 }
 

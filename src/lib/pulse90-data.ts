@@ -655,6 +655,7 @@ function fallbackToday() {
   return {
     source: "mock" as const,
     liveMatches,
+    liveBoardMatches: [] as LiveBoardMatch[],
     todayMatches,
     tomorrowMatches,
     updates,
@@ -775,9 +776,59 @@ export async function getTodayDashboard() {
   const priorityMatchWinner =
     matchWinnerRows.find((r) => r.fixture_id === priorityMatch?.fixtureId)?.label ?? null;
 
+  // Live board: fetch events for all live fixtures
+  type LiveEventRow = { fixture_id: string; event_type: string; title: string; minute: number | null; stoppage_minute: number | null; team_id: string | null };
+  let liveBoardMatches: LiveBoardMatch[] = [];
+  if (mappedLive.length > 0) {
+    const liveIds = mappedLive.map((m) => m.fixtureId).filter(Boolean) as string[];
+    const liveEventsResult = await supabase
+      .from("match_events")
+      .select("fixture_id, event_type, title, minute, stoppage_minute, team_id")
+      .in("fixture_id", liveIds)
+      .in("event_type", ["goal", "penalty_goal", "own_goal", "yellow_card", "red_card"])
+      .order("minute", { ascending: true, nullsFirst: false });
+
+    const eventsByFixture = new Map<string, LiveBoardEvent[]>();
+    for (const ev of ((liveEventsResult.data ?? []) as LiveEventRow[])) {
+      const arr = eventsByFixture.get(ev.fixture_id) ?? [];
+      arr.push({
+        eventType: ev.event_type,
+        title: ev.title,
+        minute: ev.minute,
+        stoppageMinute: ev.stoppage_minute,
+        teamId: ev.team_id,
+      });
+      eventsByFixture.set(ev.fixture_id, arr);
+    }
+
+    liveBoardMatches = mappedLive
+      .filter((m) => m.fixtureId)
+      .map((m) => {
+        const row = rawRows.find((r) => r.id === m.fixtureId);
+        return {
+          fixtureId: m.fixtureId!,
+          matchNumber: m.matchNumber,
+          home: m.home,
+          away: m.away,
+          homeScore: row?.home_score ?? null,
+          awayScore: row?.away_score ?? null,
+          minute: m.minute ?? null,
+          group: m.group,
+          homeFlagEmoji: m.homeFlagEmoji ?? "🏳",
+          homeFlagAssetUrl: m.homeFlagAssetUrl ?? null,
+          awayFlagEmoji: m.awayFlagEmoji ?? "🏳",
+          awayFlagAssetUrl: m.awayFlagAssetUrl ?? null,
+          homeTeamId: m.homeTeamId ?? null,
+          awayTeamId: m.awayTeamId ?? null,
+          events: eventsByFixture.get(m.fixtureId!) ?? [],
+        };
+      });
+  }
+
   return {
     source: "supabase" as const,
     liveMatches: mappedLive,
+    liveBoardMatches,
     todayMatches: upcoming.length ? upcoming : todayMatches,
     tomorrowMatches: tomorrowItems.length ? tomorrowItems : tomorrowMatches,
     updates: [],
@@ -789,6 +840,32 @@ export async function getTodayDashboard() {
     priorityMatchWinner,
   };
 }
+
+export type LiveBoardEvent = {
+  eventType: string;
+  title: string;
+  minute: number | null;
+  stoppageMinute: number | null;
+  teamId: string | null;
+};
+
+export type LiveBoardMatch = {
+  fixtureId: string;
+  matchNumber: number;
+  home: string;
+  away: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  minute: string | null;
+  group: string;
+  homeFlagEmoji: string;
+  homeFlagAssetUrl: string | null;
+  awayFlagEmoji: string;
+  awayFlagAssetUrl: string | null;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
+  events: LiveBoardEvent[];
+};
 
 export type ResultGoalEvent = {
   scorer: string;

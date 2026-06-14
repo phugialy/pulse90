@@ -3,9 +3,11 @@ export const dynamic = "force-dynamic";
 import { AppShell } from "@/components/app-shell";
 import { CountdownClock } from "@/components/countdown-clock";
 import { InstallAppCta } from "@/components/install-app-cta";
+import { LiveRefresh } from "@/components/live-refresh";
 import { WhoWinsVote } from "@/components/who-wins-vote";
 import {
   GroupSnapshot,
+  LiveMatchBoard,
   LiveStack,
   PageIntro,
   PredictionStrip,
@@ -21,12 +23,17 @@ export default async function Home() {
 
   return (
     <AppShell>
+      <LiveRefresh isLive={dashboard.liveMatches.length > 0} />
       <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8">
         <section className="min-w-0 space-y-5">
           <PageIntro
             kicker="World Cup 2026 watch desk"
             title="Open once. Know what matters."
           />
+
+          {dashboard.liveBoardMatches.length > 0 && (
+            <LiveMatchBoard matches={dashboard.liveBoardMatches} />
+          )}
 
           <ResultsRibbon matches={dashboard.results} />
           {dashboard.nextMatch && dashboard.liveMatches.length === 0 && (
