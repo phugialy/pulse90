@@ -121,17 +121,36 @@ export function PriorityMatch({
   const isLive = match.status === "live";
 
   return (
-    <section className="overflow-hidden rounded-[28px] bg-[#10131a] text-white shadow-[0_24px_70px_rgba(16,19,26,0.22)]">
-      {/* Top bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-6">
-        <div className="flex items-center gap-2">
-          {isLive && (
-            <span className="flex size-2 shrink-0 rounded-full bg-red-400 shadow-[0_0_6px_2px_rgba(248,113,113,0.5)]" />
-          )}
-          <span className="text-xs font-black uppercase tracking-[0.22em] text-white/50">
-            {isLive ? "Live command pick" : "Next priority match"}
+    <section
+      className={`overflow-hidden rounded-[28px] text-white ${
+        isLive
+          ? "bg-[#10131a] shadow-[0_0_0_2px_rgba(239,68,68,0.6),0_0_60px_rgba(239,68,68,0.18),0_24px_70px_rgba(16,19,26,0.3)]"
+          : "bg-[#10131a] shadow-[0_24px_70px_rgba(16,19,26,0.22)]"
+      }`}
+    >
+      {/* Live broadcast bar — only when live */}
+      {isLive && (
+        <div className="flex items-center justify-between gap-3 bg-red-600 px-6 py-2.5">
+          <div className="flex items-center gap-2">
+            <span className="relative flex size-2.5 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+              <span className="relative inline-flex size-2.5 rounded-full bg-white" />
+            </span>
+            <span className="text-xs font-black uppercase tracking-[0.22em] text-white">
+              Live now
+            </span>
+          </div>
+          <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-black text-white tabular-nums">
+            {match.minute}
           </span>
         </div>
+      )}
+
+      {/* Top bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-5">
+        <span className="text-xs font-black uppercase tracking-[0.22em] text-white/50">
+          {isLive ? "Command pick" : "Next priority match"}
+        </span>
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-white/8 px-3 py-1 text-xs font-black text-white/55">
             {match.group}
@@ -143,16 +162,29 @@ export function PriorityMatch({
       </div>
 
       {/* Teams + score */}
-      <div className="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-6">
+      <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-6">
         <div className="flex flex-col items-center gap-3">
           <HeroFlag src={match.homeFlagAssetUrl} emoji={match.homeFlagEmoji} name={match.home} />
           <span className="text-center text-lg font-black leading-tight tracking-tight text-white sm:text-xl">
             {match.home}
           </span>
         </div>
-        <span className="text-4xl font-black tabular-nums text-cobalt sm:text-5xl">
-          {match.score ?? "vs"}
-        </span>
+        <div className="flex flex-col items-center gap-1">
+          <span
+            className={`font-black tabular-nums sm:text-5xl ${
+              isLive
+                ? "text-5xl text-red-400 drop-shadow-[0_0_18px_rgba(248,113,113,0.55)] sm:text-6xl"
+                : "text-4xl text-cobalt"
+            }`}
+          >
+            {match.score ?? "vs"}
+          </span>
+          {isLive && match.score && (
+            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-red-400/70">
+              in play
+            </span>
+          )}
+        </div>
         <div className="flex flex-col items-center gap-3">
           <HeroFlag src={match.awayFlagAssetUrl} emoji={match.awayFlagEmoji} name={match.away} />
           <span className="text-center text-lg font-black leading-tight tracking-tight text-white sm:text-xl">
@@ -169,22 +201,24 @@ export function PriorityMatch({
         <p className="mt-2 text-sm font-bold leading-snug text-white/60">
           {match.stakes}
         </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {match.date && (
+        {!isLive && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {match.date && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-xs font-bold text-white/55">
+                <CalendarDays className="size-3.5" />
+                {match.date}
+              </span>
+            )}
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-xs font-bold text-white/55">
-              <CalendarDays className="size-3.5" />
-              {match.date}
+              <Clock3 className="size-3.5" />
+              {match.time}
             </span>
-          )}
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-xs font-bold text-white/55">
-            <Clock3 className="size-3.5" />
-            {match.minute ?? match.time}
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-xs font-bold text-white/55">
-            <MapPin className="size-3.5" />
-            {match.place}
-          </span>
-        </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-xs font-bold text-white/55">
+              <MapPin className="size-3.5" />
+              {match.place}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Bottom bar */}
@@ -201,7 +235,11 @@ export function PriorityMatch({
         )}
         <div className="flex gap-2">
           <Link
-            className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-4 text-sm font-black text-[#10131a] transition hover:bg-lime-300"
+            className={`inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-black transition ${
+              isLive
+                ? "bg-white text-[#10131a] hover:bg-red-50"
+                : "bg-white text-[#10131a] hover:bg-lime-300"
+            }`}
             href={`/matches/${match.matchNumber}`}
           >
             Match center
@@ -209,7 +247,7 @@ export function PriorityMatch({
           </Link>
           {isLive && (
             <a
-              className="inline-flex h-9 items-center gap-2 rounded-full bg-cobalt px-4 text-sm font-black text-white transition hover:bg-cobalt/80"
+              className="inline-flex h-9 items-center gap-2 rounded-full bg-red-600 px-4 text-sm font-black text-white transition hover:bg-red-700"
               href="https://www.fifa.com/fifaplus/en/tournaments/mens/worldcup/canadamexicousa2026"
               rel="noopener noreferrer"
               target="_blank"
@@ -226,44 +264,66 @@ export function PriorityMatch({
 
 export function LiveStack({ matches = liveMatches }: { matches?: Match[] }) {
   const sideMatches = matches.slice(1);
+  const hasLive = matches.length > 0;
 
   return (
-    <section className="rounded-[24px] border border-[#10131a]/10 bg-white/88 shadow-sm p-4">
+    <section
+      className={`rounded-[24px] p-4 ${
+        hasLive
+          ? "bg-[#10131a] shadow-[0_0_0_1px_rgba(239,68,68,0.4),0_0_32px_rgba(239,68,68,0.1)]"
+          : "border border-[#10131a]/10 bg-white/88 shadow-sm"
+      }`}
+    >
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[#10131a]/70">
-          Other live
-        </h2>
-        <Radio className="size-4 text-coral" />
+        <div className="flex items-center gap-2">
+          {hasLive && (
+            <span className="relative flex size-2 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+              <span className="relative inline-flex size-2 rounded-full bg-red-400" />
+            </span>
+          )}
+          <h2 className={`text-sm font-black uppercase tracking-[0.2em] ${hasLive ? "text-white/70" : "text-[#10131a]/70"}`}>
+            {hasLive ? "Also live" : "Other live"}
+          </h2>
+        </div>
+        <Radio className={`size-4 ${hasLive ? "text-red-400" : "text-[#10131a]/30"}`} />
       </div>
+
       {!matches.length ? (
         <div className="rounded-2xl border border-[#10131a]/10 bg-stadium p-4">
           <p className="text-lg font-black text-[#10131a]">No matches live yet.</p>
           <p className="mt-2 text-sm leading-6 text-[#10131a]/58">
-            The command center will switch on once the tournament kicks off.
+            The command center activates once the tournament is live.
           </p>
         </div>
       ) : null}
+
       <div className="space-y-3">
         {sideMatches.map((match) => (
-          <div key={`${match.home}-${match.away}`} className="rounded-2xl border border-[#10131a]/10 bg-stadium p-4">
+          <div
+            key={`${match.home}-${match.away}`}
+            className="rounded-2xl border border-red-500/20 bg-white/6 p-4"
+          >
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-bold text-[#10131a]/60">{match.minute}</p>
-              <p className="rounded-full bg-[#10131a]/5 px-2.5 py-1 text-xs font-bold text-[#10131a]/70">
+              <span className="rounded-full bg-red-600/80 px-2.5 py-1 text-[10px] font-black text-white tabular-nums">
+                {match.minute}
+              </span>
+              <span className="rounded-full bg-white/8 px-2.5 py-1 text-[10px] font-bold text-white/55">
                 {match.reason}
-              </p>
+              </span>
             </div>
             <Link href={`/matches/${match.matchNumber}`}>
-              <p className="mt-3 text-xl font-black text-[#10131a] transition hover:text-cobalt">
+              <p className="mt-3 text-xl font-black text-white transition hover:text-red-300">
                 {match.home}{" "}
-                <span className="font-mono text-cobalt">{match.score}</span>{" "}
+                <span className="font-mono text-red-400">{match.score}</span>{" "}
                 {match.away}
               </p>
             </Link>
-            <p className="mt-2 text-sm leading-6 text-[#10131a]/62">{match.stakes}</p>
+            <p className="mt-1.5 text-xs font-bold leading-5 text-white/50">{match.stakes}</p>
             <div className="mt-3 flex gap-2">
               <Link
                 href={`/matches/${match.matchNumber}`}
-                className="inline-flex items-center rounded-full border border-[#10131a]/10 bg-white px-3 py-1.5 text-xs font-black text-[#10131a]/70 transition hover:border-cobalt/30 hover:text-cobalt"
+                className="inline-flex items-center rounded-full border border-white/15 bg-white/8 px-3 py-1.5 text-xs font-black text-white/70 transition hover:bg-white/15"
               >
                 Match center
               </Link>
@@ -271,7 +331,7 @@ export function LiveStack({ matches = liveMatches }: { matches?: Match[] }) {
                 href="https://www.fifa.com/fifaplus/en/tournaments/mens/worldcup/canadamexicousa2026"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-full bg-cobalt px-3 py-1.5 text-xs font-black text-white transition hover:bg-cobalt/80"
+                className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1.5 text-xs font-black text-white transition hover:bg-red-700"
               >
                 <Tv className="size-3" />
                 Watch
