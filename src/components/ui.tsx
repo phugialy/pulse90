@@ -218,6 +218,7 @@ export function PriorityMatch({
             <div className="space-y-1">
               {goals.filter((e) => e.teamId === heroLive.homeTeamId).map((e, i) => (
                 <div key={i} className="flex items-center gap-1.5 text-xs font-bold text-white/70">
+                  <span className="shrink-0 text-sm leading-none">{heroLive.homeFlagEmoji}</span>
                   <span>⚽</span>
                   <span>{playerName(e.title)}</span>
                   {minuteStr(e) && <span className="text-red-400/60">{minuteStr(e)}</span>}
@@ -231,6 +232,7 @@ export function PriorityMatch({
                   {minuteStr(e) && <span className="text-red-400/60">{minuteStr(e)}</span>}
                   <span>{playerName(e.title)}</span>
                   <span>⚽</span>
+                  <span className="shrink-0 text-sm leading-none">{heroLive.awayFlagEmoji}</span>
                 </div>
               ))}
             </div>
@@ -604,21 +606,38 @@ function LiveBoardCard({ match }: { match: LiveBoardMatch }) {
       {/* Event log */}
       {(goals.length > 0 || cards.length > 0) && (
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {goals.map((ev, i) => (
-            <span key={i} className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold text-white/80">
-              <span>{ev.eventType === "own_goal" ? "⚽ OG" : "⚽"}</span>
-              <span>{ev.title.replace(/\s+\d+(\+\d+)?'$/, "")}</span>
-              {ev.minute && <span className="text-white/45">{ev.minute}{ev.stoppageMinute ? `+${ev.stoppageMinute}` : ""}'</span>}
-              {ev.eventType === "penalty_goal" && <span className="text-cobalt">(pen)</span>}
-            </span>
-          ))}
-          {cards.map((ev, i) => (
-            <span key={i} className="inline-flex items-center gap-1 rounded-full bg-white/8 px-2.5 py-1 text-xs font-bold text-white/60">
-              <span>{ev.eventType === "red_card" ? "🟥" : "🟨"}</span>
-              <span>{ev.title.replace(/\s+\d+(\+\d+)?'$/, "")}</span>
-              {ev.minute && <span className="text-white/40">{ev.minute}'</span>}
-            </span>
-          ))}
+          {goals.map((ev, i) => {
+            const flag = ev.teamId === match.homeTeamId
+              ? match.homeFlagEmoji
+              : ev.teamId === match.awayTeamId
+                ? match.awayFlagEmoji
+                : null;
+            return (
+              <span key={i} className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold text-white/80">
+                {flag && <span className="leading-none">{flag}</span>}
+                <span>⚽</span>
+                <span>{ev.title.replace(/\s+\d+(\+\d+)?'$/, "")}</span>
+                {ev.minute && <span className="text-white/45">{ev.minute}{ev.stoppageMinute ? `+${ev.stoppageMinute}` : ""}'</span>}
+                {ev.eventType === "own_goal" && <span className="text-white/40">OG</span>}
+                {ev.eventType === "penalty_goal" && <span className="text-cobalt">pen</span>}
+              </span>
+            );
+          })}
+          {cards.map((ev, i) => {
+            const flag = ev.teamId === match.homeTeamId
+              ? match.homeFlagEmoji
+              : ev.teamId === match.awayTeamId
+                ? match.awayFlagEmoji
+                : null;
+            return (
+              <span key={i} className="inline-flex items-center gap-1 rounded-full bg-white/8 px-2.5 py-1 text-xs font-bold text-white/60">
+                {flag && <span className="leading-none">{flag}</span>}
+                <span>{ev.eventType === "red_card" ? "🟥" : "🟨"}</span>
+                <span>{ev.title.replace(/\s+\d+(\+\d+)?'$/, "")}</span>
+                {ev.minute && <span className="text-white/40">{ev.minute}'</span>}
+              </span>
+            );
+          })}
         </div>
       )}
 

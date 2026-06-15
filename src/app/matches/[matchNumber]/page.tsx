@@ -97,6 +97,8 @@ export default async function MatchPage({
                   events={events}
                   homeTeamId={homeTeamId}
                   awayTeamId={awayTeamId}
+                  homeFlagEmoji={homeTeam?.flagEmoji ?? match.homeFlagEmoji}
+                  awayFlagEmoji={awayTeam?.flagEmoji ?? match.awayFlagEmoji}
                 />
               )}
 
@@ -433,10 +435,14 @@ function InlineMatchEvents({
   events,
   homeTeamId,
   awayTeamId,
+  homeFlagEmoji,
+  awayFlagEmoji,
 }: {
   events: MatchEvent[];
   homeTeamId: string | null;
   awayTeamId: string | null;
+  homeFlagEmoji?: string;
+  awayFlagEmoji?: string;
 }) {
   const goals = events.filter(
     (e) => e.eventType === "goal" || e.eventType === "own_goal" || e.eventType === "penalty_goal",
@@ -457,6 +463,7 @@ function InlineMatchEvents({
           <div className="space-y-1.5">
             {homeGoals.map((e, i) => (
               <div key={i} className="flex items-center gap-1.5 text-sm">
+                {homeFlagEmoji && <span className="shrink-0 text-base leading-none">{homeFlagEmoji}</span>}
                 <span className="shrink-0">⚽</span>
                 <span className="font-black text-[#10131a]">{stripMinute(e.title)}</span>
                 {e.eventType === "own_goal" && (
@@ -486,6 +493,7 @@ function InlineMatchEvents({
                 )}
                 <span className="font-black text-[#10131a]">{stripMinute(e.title)}</span>
                 <span className="shrink-0">⚽</span>
+                {awayFlagEmoji && <span className="shrink-0 text-base leading-none">{awayFlagEmoji}</span>}
               </div>
             ))}
           </div>
@@ -493,14 +501,18 @@ function InlineMatchEvents({
       )}
       {cards.length > 0 && (
         <div className="flex flex-wrap gap-1.5 border-t border-[#10131a]/8 pt-3">
-          {cards.map((e, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center gap-1 rounded-full border border-[#10131a]/10 bg-stadium px-2.5 py-1 text-[11px] font-bold text-[#10131a]/70"
-            >
-              {eventIcon(e.eventType)} {e.title}
-            </span>
-          ))}
+          {cards.map((e, i) => {
+            const flag = e.teamId === homeTeamId ? homeFlagEmoji : e.teamId === awayTeamId ? awayFlagEmoji : null;
+            return (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 rounded-full border border-[#10131a]/10 bg-stadium px-2.5 py-1 text-[11px] font-bold text-[#10131a]/70"
+              >
+                {flag && <span className="leading-none">{flag}</span>}
+                {eventIcon(e.eventType)} {stripMinute(e.title)}
+              </span>
+            );
+          })}
         </div>
       )}
     </div>
