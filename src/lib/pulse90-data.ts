@@ -1034,7 +1034,30 @@ export async function getFixtureExplorer() {
     });
   }
 
-  return { upcoming, results };
+  // Fetch events for the featured match if it's live (goals + cards)
+  let nextMatchEvents: LiveBoardEvent[] = [];
+  const featuredRow = allRows.find((r) => r.status === "live");
+  if (featuredRow) {
+    type LiveEvRow = {
+      event_type: string; title: string;
+      minute: number | null; stoppage_minute: number | null; team_id: string | null;
+    };
+    const evResult = await supabase
+      .from("match_events")
+      .select("event_type, title, minute, stoppage_minute, team_id")
+      .eq("fixture_id", featuredRow.id)
+      .in("event_type", ["goal", "penalty_goal", "own_goal", "yellow_card", "red_card"])
+      .order("minute", { ascending: true, nullsFirst: false });
+    nextMatchEvents = ((evResult.data ?? []) as LiveEvRow[]).map((ev) => ({
+      eventType: ev.event_type,
+      title: ev.title,
+      minute: ev.minute,
+      stoppageMinute: ev.stoppage_minute,
+      teamId: ev.team_id,
+    }));
+  }
+
+  return { upcoming, results, nextMatchEvents };
 }
 
 const RESULTS_PER_PAGE = 10;

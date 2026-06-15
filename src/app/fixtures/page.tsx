@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { PageIntro } from "@/components/ui";
-import { getFixtureExplorer, type ResultMatch } from "@/lib/pulse90-data";
+import { getFixtureExplorer, type LiveBoardEvent, type ResultMatch } from "@/lib/pulse90-data";
 import type { Match } from "@/lib/mock-data";
 import { CalendarDays, Clock3, MapPin, ArrowUpRight, Trophy } from "lucide-react";
 import Link from "next/link";
@@ -8,7 +8,7 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 export default async function FixturesPage() {
-  const { upcoming, results } = await getFixtureExplorer();
+  const { upcoming, results, nextMatchEvents } = await getFixtureExplorer();
   const nextMatch = upcoming[0] ?? null;
   const fixtureList = upcoming.slice(1);
 
@@ -24,7 +24,7 @@ export default async function FixturesPage() {
         <div className="mt-6 lg:grid lg:grid-cols-[1fr_320px] lg:gap-8">
           {/* Main: upcoming matches */}
           <div className="min-w-0">
-            {nextMatch ? <NextFixtureHero match={nextMatch} /> : null}
+            {nextMatch ? <NextFixtureHero match={nextMatch} events={nextMatchEvents} /> : null}
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {fixtureList.map((match) => (
                 <FixtureTile match={match} key={match.matchNumber} />
@@ -171,15 +171,35 @@ function TeamFlag({
   return <span className="shrink-0 text-sm leading-none">{flagEmoji ?? "🏳"}</span>;
 }
 
-function NextFixtureHero({ match }: { match: Match }) {
+function stripMin(title: string) {
+  return title.replace(/\s+\d+(?:\+\d+)?'$/, "").trim() || title;
+}
+
+function NextFixtureHero({ match, events = [] }: { match: Match; events?: LiveBoardEvent[] }) {
+  const isLive = match.status === "live";
+  const goals = events.filter(
+    (e) => e.eventType === "goal" || e.eventType === "penalty_goal" || e.eventType === "own_goal",
+  );
+  const cards = events.filter(
+    (e) => e.eventType === "yellow_card" || e.eventType === "red_card",
+  );
+  const homeGoals = goals.filter((e) => e.teamId === match.homeTeamId);
+  const awayGoals = goals.filter((e) => e.teamId === match.awayTeamId);
+
   return (
     <section className="overflow-hidden rounded-[28px] border border-[#10131a]/10 bg-[#10131a] text-white shadow-[0_24px_70px_rgba(25,45,88,0.18)]">
       <div className="grid gap-5 p-5 md:grid-cols-[1fr_300px] md:p-6">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full bg-lime-300 px-3 py-1 text-xs font-black text-black">
-              <Trophy className="size-3.5" />
-              {match.status === "live" ? "Live now" : "Next up"}
+            <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black ${isLive ? "bg-red-600 text-white" : "bg-lime-300 text-black"}`}>
+              {isLive && (
+                <span className="relative flex size-1.5 shrink-0">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+                  <span className="relative inline-flex size-1.5 rounded-full bg-white" />
+                </span>
+              )}
+              {!isLive && <Trophy className="size-3.5" />}
+              {isLive ? "Live now" : "Next up"}
             </span>
             <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black text-white/70">
               {match.group}
@@ -188,11 +208,70 @@ function NextFixtureHero({ match }: { match: Match }) {
 
           <div className="mt-7 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
             <FixtureTeamFlag match={match} side="home" hero />
-            <span className="text-center text-2xl font-black text-lime-300 sm:text-4xl">
+            <span className={`text-center text-2xl font-black sm:text-4xl ${isLive ? "text-red-400 drop-shadow-[0_0_12px_rgba(248,113,113,0.5)]" : "text-lime-300"}`}>
               {match.score ?? "vs"}
             </span>
             <FixtureTeamFlag match={match} side="away" hero />
           </div>
+
+          {/* Goal scorers */}
+          {goals.length > 0 && (
+            <div className="mt-5 grid grid-cols-[1fr_1px_1fr] gap-x-3">
+              <div className="space-y-1.5">
+                {homeGoals.map((e, i) => (
+                  <div key={i} className="flex items-center gap-1.5 text-xs font-bold text-white/70">
+                    <span className="shrink-0 text-sm leading-none">{match.homeFlagEmoji}</span>
+                    <span>⚽</span>
+                    <span>{stripMin(e.title)}</span>
+                    {e.eventType === "own_goal" && <span className="text-white/40">OG</span>}
+                    {e.eventType === "penalty_goal" && <span className="text-white/40">pen</span>}
+                    {e.minute != null && (
+                      <span className="ml-auto text-red-400/60 tabular-nums">
+                        {e.minute}{e.stoppageMinute ? `+${e.stoppageMinute}` : ""}'
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="bg-white/10" />
+              <div className="space-y-1.5">
+                {awayGoals.map((e, i) => (
+                  <div key={i} className="flex items-center justify-end gap-1.5 text-xs font-bold text-white/70">
+                    {e.minute != null && (
+                      <span className="mr-auto text-red-400/60 tabular-nums">
+                        {e.minute}{e.stoppageMinute ? `+${e.stoppageMinute}` : ""}'
+                      </span>
+                    )}
+                    {e.eventType === "own_goal" && <span className="text-white/40">OG</span>}
+                    {e.eventType === "penalty_goal" && <span className="text-white/40">pen</span>}
+                    <span>{stripMin(e.title)}</span>
+                    <span>⚽</span>
+                    <span className="shrink-0 text-sm leading-none">{match.awayFlagEmoji}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Cards */}
+          {cards.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {cards.map((e, i) => {
+                const flag = e.teamId === match.homeTeamId
+                  ? match.homeFlagEmoji
+                  : e.teamId === match.awayTeamId
+                    ? match.awayFlagEmoji
+                    : null;
+                return (
+                  <span key={i} className="inline-flex items-center gap-1 rounded-full bg-white/8 px-2.5 py-1 text-[11px] font-bold text-white/55">
+                    {flag && <span className="leading-none">{flag}</span>}
+                    {e.eventType === "red_card" ? "🟥" : "🟨"} {stripMin(e.title)}
+                    {e.minute != null && <span className="text-white/35">{e.minute}'</span>}
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="rounded-[24px] border border-white/10 bg-white/[0.09] p-4">
