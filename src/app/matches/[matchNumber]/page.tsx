@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { AppShell } from "@/components/app-shell";
 import { MatchTeamTabs } from "@/components/match-team-tabs";
 import { WhoWinsVote } from "@/components/who-wins-vote";
@@ -15,6 +16,26 @@ import {
 import { CalendarDays, Clock3, MapPin, Trophy } from "lucide-react";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ matchNumber: string }>;
+}): Promise<Metadata> {
+  const { matchNumber } = await params;
+  const { match } = await getMatchCenter(matchNumber);
+  if (!match) return {};
+  const score = match.score ? ` ${match.score} ` : " vs ";
+  const title = `${match.home}${score}${match.away} · ${match.group}`;
+  const description = match.stakes ?? `${match.home} vs ${match.away} — World Cup 2026 match center with live score, lineups, and group context.`;
+  return {
+    title,
+    description,
+    openGraph: { title, description },
+    twitter: { title, description },
+    alternates: { canonical: `/matches/${matchNumber}` },
+  };
+}
 
 export default async function MatchPage({
   params,
@@ -70,6 +91,15 @@ export default async function MatchPage({
                 />
               </div>
 
+              {/* Inline goal scorers + cards — shown for live and completed matches */}
+              {events.length > 0 && (match.status === "live" || match.status === "completed") && (
+                <InlineMatchEvents
+                  events={events}
+                  homeTeamId={homeTeamId}
+                  awayTeamId={awayTeamId}
+                />
+              )}
+
               <div className="mt-6 flex flex-wrap gap-2">
                 {match.date ? <StatusPill icon={CalendarDays}>{match.date}</StatusPill> : null}
                 <StatusPill icon={Clock3}>
@@ -124,13 +154,6 @@ export default async function MatchPage({
               />
             )}
 
-            {events.length > 0 && (
-              <EventTimeline
-                events={events}
-                homeTeamId={homeTeamId}
-                awayTeamId={awayTeamId}
-              />
-            )}
           </section>
 
           <aside className="min-w-0 space-y-5">
@@ -402,7 +425,11 @@ function eventIcon(eventType: string) {
   }
 }
 
-function EventTimeline({
+function stripMinute(title: string) {
+  return title.replace(/\s+\d+(?:\+\d+)?'$/, "").trim() || title;
+}
+
+function InlineMatchEvents({
   events,
   homeTeamId,
   awayTeamId,
@@ -411,98 +438,71 @@ function EventTimeline({
   homeTeamId: string | null;
   awayTeamId: string | null;
 }) {
-  const goals = events.filter((e) =>
-    e.eventType === "goal" || e.eventType === "own_goal" || e.eventType === "penalty_goal",
+  const goals = events.filter(
+    (e) => e.eventType === "goal" || e.eventType === "own_goal" || e.eventType === "penalty_goal",
   );
-  const cards = events.filter((e) =>
-    e.eventType === "yellow_card" || e.eventType === "red_card",
+  const cards = events.filter(
+    (e) => e.eventType === "yellow_card" || e.eventType === "red_card",
   );
+
+  if (goals.length === 0 && cards.length === 0) return null;
+
+  const homeGoals = goals.filter((e) => e.teamId === homeTeamId);
+  const awayGoals = goals.filter((e) => e.teamId === awayTeamId);
 
   return (
-    <section className="overflow-hidden rounded-[28px] border border-[#10131a]/10 bg-white p-5 shadow-sm sm:p-6">
-      <p className="text-xs font-black uppercase tracking-[0.2em] text-[#10131a]/60">
-        Match events
-      </p>
-
+    <div className="mt-5 space-y-3">
       {goals.length > 0 && (
-        <div className="mt-4">
-          <div className="grid grid-cols-[1fr_44px_1fr] items-start gap-2">
-            {/* Home goals */}
-            <div className="space-y-2">
-              {goals
-                .filter((e) => e.teamId === homeTeamId)
-                .map((e, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm">
-                    <span className="text-base leading-none">⚽</span>
-                    <span className="font-black text-[#10131a]">{e.title}</span>
-                    {e.eventType === "own_goal" && (
-                      <span className="rounded-full bg-[#10131a]/8 px-2 py-0.5 text-[10px] font-black text-[#10131a]/50">
-                        OG
-                      </span>
-                    )}
-                    {e.eventType === "penalty_goal" && (
-                      <span className="rounded-full bg-cobalt/10 px-2 py-0.5 text-[10px] font-black text-cobalt">
-                        PEN
-                      </span>
-                    )}
-                  </div>
-                ))}
-            </div>
-
-            {/* Center divider */}
-            <div className="flex justify-center pt-1">
-              <div className="h-full w-px bg-[#10131a]/10" />
-            </div>
-
-            {/* Away goals */}
-            <div className="space-y-2">
-              {goals
-                .filter((e) => e.teamId === awayTeamId)
-                .map((e, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm">
-                    <span className="text-base leading-none">⚽</span>
-                    <span className="font-black text-[#10131a]">{e.title}</span>
-                    {e.eventType === "own_goal" && (
-                      <span className="rounded-full bg-[#10131a]/8 px-2 py-0.5 text-[10px] font-black text-[#10131a]/50">
-                        OG
-                      </span>
-                    )}
-                    {e.eventType === "penalty_goal" && (
-                      <span className="rounded-full bg-cobalt/10 px-2 py-0.5 text-[10px] font-black text-cobalt">
-                        PEN
-                      </span>
-                    )}
-                  </div>
-                ))}
-            </div>
+        <div className="grid grid-cols-[1fr_1px_1fr] gap-x-3">
+          <div className="space-y-1.5">
+            {homeGoals.map((e, i) => (
+              <div key={i} className="flex items-center gap-1.5 text-sm">
+                <span className="shrink-0">⚽</span>
+                <span className="font-black text-[#10131a]">{stripMinute(e.title)}</span>
+                {e.eventType === "own_goal" && (
+                  <span className="rounded-full bg-[#10131a]/8 px-1.5 py-0.5 text-[10px] font-black text-[#10131a]/50">OG</span>
+                )}
+                {e.eventType === "penalty_goal" && (
+                  <span className="rounded-full bg-cobalt/10 px-1.5 py-0.5 text-[10px] font-black text-cobalt">PEN</span>
+                )}
+                <span className="ml-auto text-[11px] font-bold text-[#10131a]/40 tabular-nums">
+                  {e.title.match(/\d+(?:\+\d+)?'$/)?.[0] ?? ""}
+                </span>
+              </div>
+            ))}
           </div>
-        </div>
-      )}
-
-      {goals.length === 0 && (
-        <p className="mt-4 rounded-2xl bg-stadium p-3 text-sm font-bold text-[#10131a]/50">
-          No goals recorded
-        </p>
-      )}
-
-      {cards.length > 0 && (
-        <div className="mt-4 border-t border-[#10131a]/8 pt-4">
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#10131a]/42">
-            Cards
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {cards.map((e, i) => (
-              <span
-                key={i}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#10131a]/10 bg-stadium px-3 py-1 text-xs font-black text-[#10131a]"
-              >
-                <span className="text-sm leading-none">{eventIcon(e.eventType)}</span>
-                {e.title}
-              </span>
+          <div className="bg-[#10131a]/10" />
+          <div className="space-y-1.5">
+            {awayGoals.map((e, i) => (
+              <div key={i} className="flex items-center justify-end gap-1.5 text-sm">
+                <span className="text-[11px] font-bold text-[#10131a]/40 tabular-nums">
+                  {e.title.match(/\d+(?:\+\d+)?'$/)?.[0] ?? ""}
+                </span>
+                {e.eventType === "own_goal" && (
+                  <span className="rounded-full bg-[#10131a]/8 px-1.5 py-0.5 text-[10px] font-black text-[#10131a]/50">OG</span>
+                )}
+                {e.eventType === "penalty_goal" && (
+                  <span className="rounded-full bg-cobalt/10 px-1.5 py-0.5 text-[10px] font-black text-cobalt">PEN</span>
+                )}
+                <span className="font-black text-[#10131a]">{stripMinute(e.title)}</span>
+                <span className="shrink-0">⚽</span>
+              </div>
             ))}
           </div>
         </div>
       )}
-    </section>
+      {cards.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 border-t border-[#10131a]/8 pt-3">
+          {cards.map((e, i) => (
+            <span
+              key={i}
+              className="inline-flex items-center gap-1 rounded-full border border-[#10131a]/10 bg-stadium px-2.5 py-1 text-[11px] font-bold text-[#10131a]/70"
+            >
+              {eventIcon(e.eventType)} {e.title}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

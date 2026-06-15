@@ -7,6 +7,10 @@
     {
       "path": "/api/sync/predictions",
       "schedule": "0 */8 * * *"
+    },
+    {
+      "path": "/api/sync/narratives",
+      "schedule": "0 6 * * *"
     }
   ]
 }

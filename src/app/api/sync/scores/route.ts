@@ -450,19 +450,20 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Sync match events when fixture is completed and ESPN has details
-    if (newStatus === "completed" && (comp?.details?.length ?? 0) > 0) {
+    // Sync match events during live play and on completion.
+    // ESPN details are cumulative, so we replace when count changes.
+    if ((newStatus === "live" || newStatus === "completed") && (comp?.details?.length ?? 0) > 0) {
       const espnIdToTeamId = new Map<string, string>();
       if (hComp) espnIdToTeamId.set(hComp.team.id, fixture.home_team_id);
       if (aComp) espnIdToTeamId.set(aComp.team.id, fixture.away_team_id);
       const eventsToInsert = buildMatchEvents(fixture.id, comp!.details!, espnIdToTeamId);
       if (eventsToInsert.length > 0) {
-        // Upsert guard: only insert if no events exist (prevents double inserts)
-        const { count: existing } = await supabase
+        const { count: dbCount } = await supabase
           .from("match_events")
           .select("id", { count: "exact", head: true })
           .eq("fixture_id", fixture.id);
-        if (!existing) {
+        if ((dbCount ?? 0) !== eventsToInsert.length) {
+          await supabase.from("match_events").delete().eq("fixture_id", fixture.id);
           await supabase.from("match_events").insert(eventsToInsert);
         }
       }

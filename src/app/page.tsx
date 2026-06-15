@@ -50,7 +50,7 @@ export default async function Home() {
               />
             </div>
           )}
-          <PriorityMatch match={priorityMatch} matchWinner={dashboard.priorityMatchWinner} />
+          <PriorityMatch match={priorityMatch} matchWinner={dashboard.priorityMatchWinner} heroLive={dashboard.heroLive} />
 
           {priorityMatch?.fixtureId &&
             priorityMatch.homeTeamId &&

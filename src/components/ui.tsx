@@ -114,10 +114,184 @@ function HeroFlag({ src, emoji, name }: { src?: string | null; emoji?: string; n
 export function PriorityMatch({
   match = liveMatches[0],
   matchWinner = null,
+  heroLive = null,
 }: {
   match?: Match;
   matchWinner?: string | null;
+  heroLive?: LiveBoardMatch | null;
 }) {
+  // ── LIVE MODE ────────────────────────────────────────────────────
+  if (heroLive != null) {
+    const isPreMatch = heroLive.isPreMatch ?? false;
+    const homeScore = heroLive.homeScore ?? 0;
+    const awayScore = heroLive.awayScore ?? 0;
+
+    const goals = heroLive.events.filter(
+      (e) => e.eventType === "goal" || e.eventType === "own_goal",
+    );
+    const cards = heroLive.events.filter(
+      (e) => e.eventType === "yellow_card" || e.eventType === "red_card",
+    );
+
+    // title is stored as "Havertz 23'" — strip the trailing minute for clean display
+    const playerName = (title: string) => title.replace(/\s+\d+(?:\+\d+)?'$/, "").trim() || title;
+    const minuteStr = (e: { minute: number | null; stoppageMinute: number | null }) =>
+      e.minute != null
+        ? e.stoppageMinute != null
+          ? `${e.minute}+${e.stoppageMinute}'`
+          : `${e.minute}'`
+        : null;
+
+    return (
+      <section className="overflow-hidden rounded-[28px] bg-[#10131a] text-white shadow-[0_0_0_2px_rgba(239,68,68,0.6),0_0_60px_rgba(239,68,68,0.18),0_24px_70px_rgba(16,19,26,0.3)]">
+        {/* Broadcast bar */}
+        <div className="flex items-center justify-between gap-3 bg-red-600 px-6 py-2.5">
+          <div className="flex items-center gap-2">
+            <span className="relative flex size-2.5 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+              <span className="relative inline-flex size-2.5 rounded-full bg-white" />
+            </span>
+            <span className="text-xs font-black uppercase tracking-[0.22em] text-white">
+              {isPreMatch
+                ? `Kick off in ${heroLive.minutesUntilKickoff ?? "?"} min`
+                : "Live now"}
+            </span>
+          </div>
+          <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-black text-white tabular-nums">
+            {isPreMatch ? "Pre-match" : (heroLive.minute ?? "Live")}
+          </span>
+        </div>
+
+        {/* Top meta */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-5">
+          <span className="text-xs font-black uppercase tracking-[0.22em] text-white/50">
+            {isPreMatch ? "Up next" : "Live match"}
+          </span>
+          <span className="rounded-full bg-white/8 px-3 py-1 text-xs font-black text-white/55">
+            {heroLive.group}
+          </span>
+        </div>
+
+        {/* Teams + score */}
+        <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-6">
+          <div className="flex flex-col items-center gap-3">
+            <HeroFlag
+              src={heroLive.homeFlagAssetUrl}
+              emoji={heroLive.homeFlagEmoji}
+              name={heroLive.home}
+            />
+            <span className="text-center text-lg font-black leading-tight tracking-tight text-white sm:text-xl">
+              {heroLive.home}
+            </span>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <span
+              className={`font-black tabular-nums ${
+                isPreMatch
+                  ? "text-4xl text-white/60"
+                  : "text-5xl text-red-400 drop-shadow-[0_0_18px_rgba(248,113,113,0.55)] sm:text-6xl"
+              }`}
+            >
+              {homeScore} — {awayScore}
+            </span>
+            {!isPreMatch && (
+              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-red-400/70">
+                in play
+              </span>
+            )}
+          </div>
+          <div className="flex flex-col items-center gap-3">
+            <HeroFlag
+              src={heroLive.awayFlagAssetUrl}
+              emoji={heroLive.awayFlagEmoji}
+              name={heroLive.away}
+            />
+            <span className="text-center text-lg font-black leading-tight tracking-tight text-white sm:text-xl">
+              {heroLive.away}
+            </span>
+          </div>
+        </div>
+
+        {/* Goal scorers — home left, away right */}
+        {goals.length > 0 && (
+          <div className="mt-5 grid grid-cols-[1fr_auto_1fr] gap-x-3 px-6">
+            <div className="space-y-1">
+              {goals.filter((e) => e.teamId === heroLive.homeTeamId).map((e, i) => (
+                <div key={i} className="flex items-center gap-1.5 text-xs font-bold text-white/70">
+                  <span>⚽</span>
+                  <span>{playerName(e.title)}</span>
+                  {minuteStr(e) && <span className="text-red-400/60">{minuteStr(e)}</span>}
+                </div>
+              ))}
+            </div>
+            <div className="w-px bg-white/10" />
+            <div className="space-y-1">
+              {goals.filter((e) => e.teamId === heroLive.awayTeamId).map((e, i) => (
+                <div key={i} className="flex items-center justify-end gap-1.5 text-xs font-bold text-white/70">
+                  {minuteStr(e) && <span className="text-red-400/60">{minuteStr(e)}</span>}
+                  <span>{playerName(e.title)}</span>
+                  <span>⚽</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Cards strip */}
+        {cards.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5 px-6">
+            {cards.map((e, i) => {
+              const isHome = e.teamId != null && e.teamId === heroLive.homeTeamId;
+              const isAway = e.teamId != null && e.teamId === heroLive.awayTeamId;
+              const flagEmoji = isHome
+                ? heroLive.homeFlagEmoji
+                : isAway
+                  ? heroLive.awayFlagEmoji
+                  : null;
+              const icon = e.eventType === "red_card" ? "🟥" : "🟨";
+              return (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1 rounded-full bg-white/8 px-2.5 py-1 text-[11px] font-bold text-white/55"
+                >
+                  {icon} {playerName(e.title)}{flagEmoji ? ` ${flagEmoji}` : ""}{minuteStr(e) ? ` ${minuteStr(e)}` : ""}
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Bottom bar */}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/8 px-6 py-4">
+          <span className="text-xs font-bold text-white/30">
+            {isPreMatch ? "Starting soon · auto-switches to live" : "Score updates every 2 min"}
+          </span>
+          <div className="flex gap-2">
+            <Link
+              className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-4 text-sm font-black text-[#10131a] transition hover:bg-red-50"
+              href={`/matches/${heroLive.matchNumber}`}
+            >
+              Match center
+              <ArrowUpRight className="size-4" />
+            </Link>
+            {!isPreMatch && (
+              <a
+                className="inline-flex h-9 items-center gap-2 rounded-full bg-red-600 px-4 text-sm font-black text-white transition hover:bg-red-700"
+                href="https://www.fifa.com/fifaplus/en/tournaments/mens/worldcup/canadamexicousa2026"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                <Tv className="size-4" />
+                Watch live
+              </a>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // ── REGULAR MODE ─────────────────────────────────────────────────
   const isLive = match.status === "live";
 
   return (

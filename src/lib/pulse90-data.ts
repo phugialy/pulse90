@@ -656,6 +656,7 @@ function fallbackToday() {
     source: "mock" as const,
     liveMatches,
     liveBoardMatches: [] as LiveBoardMatch[],
+    heroLive: null as LiveBoardMatch | null,
     todayMatches,
     tomorrowMatches,
     updates,
@@ -861,10 +862,44 @@ export async function getTodayDashboard() {
       });
   }
 
+  // Hero live: active live match OR next match within 15-min pre-match buffer
+  const heroLive: LiveBoardMatch | null = (() => {
+    if (liveBoardMatches.length > 0) return liveBoardMatches[0];
+    // Pre-match: next scheduled match starting within 15 min
+    const nextUpRow = rawRows.find(
+      (r) => r.status === "scheduled" && new Date(r.starts_at) > now,
+    );
+    if (!nextUpRow) return null;
+    const minutesUntil = (new Date(nextUpRow.starts_at).getTime() - now.getTime()) / 60_000;
+    if (minutesUntil > 15) return null;
+    const homeFlag = nextUpRow.home_team_slug ? teamFlags.get(nextUpRow.home_team_slug) : undefined;
+    const awayFlag = nextUpRow.away_team_slug ? teamFlags.get(nextUpRow.away_team_slug) : undefined;
+    return {
+      fixtureId: nextUpRow.id,
+      matchNumber: nextUpRow.match_number,
+      home: nextUpRow.home_team ?? "TBD",
+      away: nextUpRow.away_team ?? "TBD",
+      homeScore: 0,
+      awayScore: 0,
+      minute: null,
+      group: nextUpRow.group_code ? `Group ${nextUpRow.group_code}` : nextUpRow.stage,
+      homeFlagEmoji: homeFlag?.emoji ?? "🏳",
+      homeFlagAssetUrl: homeFlag?.assetUrl ?? null,
+      awayFlagEmoji: awayFlag?.emoji ?? "🏳",
+      awayFlagAssetUrl: awayFlag?.assetUrl ?? null,
+      homeTeamId: homeFlag?.id ?? null,
+      awayTeamId: awayFlag?.id ?? null,
+      events: [],
+      isPreMatch: true,
+      minutesUntilKickoff: Math.ceil(minutesUntil),
+    };
+  })();
+
   return {
     source: "supabase" as const,
     liveMatches: mappedLive,
     liveBoardMatches,
+    heroLive,
     todayMatches: upcoming.length ? upcoming : todayMatches,
     tomorrowMatches: tomorrowItems.length ? tomorrowItems : tomorrowMatches,
     updates: [],
@@ -901,6 +936,8 @@ export type LiveBoardMatch = {
   homeTeamId: string | null;
   awayTeamId: string | null;
   events: LiveBoardEvent[];
+  isPreMatch?: boolean;
+  minutesUntilKickoff?: number;
 };
 
 export type ResultGoalEvent = {

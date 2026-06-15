@@ -1,10 +1,30 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { ArrowUpRight, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TeamWatchTabs } from "@/components/team-watch-tabs";
 import { PageIntro } from "@/components/ui";
 import { getTeamPath } from "@/lib/pulse90-data";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const { team } = await getTeamPath(slug);
+  if (!team) return {};
+  const title = `${team.name} · ${team.group}`;
+  const description = team.need ?? `Follow ${team.name}'s path through World Cup 2026 — fixtures, results, and group standing.`;
+  return {
+    title,
+    description,
+    openGraph: { title, description },
+    twitter: { title, description },
+    alternates: { canonical: `/teams/${slug}` },
+  };
+}
 
 export default async function TeamPage({
   params,

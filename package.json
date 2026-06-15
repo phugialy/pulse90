@@ -14,6 +14,7 @@
     "import:history": "node scripts/import-team-recent-history.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "@supabase/supabase-js": "^2.107.0",
     "lucide-react": "^1.17.0",
     "next": "16.2.7",

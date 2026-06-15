@@ -12,10 +12,37 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://pulse90.loxys.co";
+const SITE_TITLE = "Pulse90 | World Cup 2026 Watch Desk";
+const SITE_DESCRIPTION =
+  "Open once. Know what matters. Pulse90 is a daily match desk for World Cup 2026 — fixtures, live scores, group standings, and match context all in one place.";
+
 export const metadata: Metadata = {
-  title: "Pulse90 | World Cup Watch Desk",
-  description:
-    "A daily match desk for knowing what matters before, during, and after World Cup games.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: SITE_TITLE,
+    template: "%s · Pulse90",
+  },
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: "Pulse90",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    url: SITE_URL,
+  },
+  twitter: {
+    card: "summary",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
