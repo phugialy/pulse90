@@ -608,7 +608,8 @@ export async function GET(request: NextRequest) {
     const { count: lineupCount } = await supabase
       .from("fixture_lineups")
       .select("id", { count: "exact", head: true })
-      .eq("fixture_id", fixture.id);
+      .eq("fixture_id", fixture.id)
+      .not("starting_xi", "is", null);
 
     if ((lineupCount ?? 0) >= 2) continue;
 

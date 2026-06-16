@@ -166,11 +166,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ status: "ok", message: "No fixtures in window", synced: 0 });
   }
 
-  // Find which fixtures already have both team lineup rows
+  // Find which fixtures already have both team lineup rows WITH starting_xi populated
   const { data: existingLineups } = await supabase
     .from("fixture_lineups")
     .select("fixture_id")
-    .in("fixture_id", allFixtures.map((f: { id: string }) => f.id));
+    .in("fixture_id", allFixtures.map((f: { id: string }) => f.id))
+    .not("starting_xi", "is", null);
 
   const lineupCountByFixture = new Map<string, number>();
   for (const row of (existingLineups ?? []) as { fixture_id: string }[]) {
