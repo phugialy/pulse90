@@ -22,17 +22,17 @@ type FixtureRow = {
 
 type EspnSummaryRosterEntry = {
   starter: boolean;
-  displayName: string;
+  athlete: { displayName: string };
   position: { abbreviation: string };
+  formationPlace?: string;
 };
 
 type EspnSummary = {
-  boxscore?: {
-    players?: Array<{
-      team: { id: string };
-      roster?: EspnSummaryRosterEntry[];
-    }>;
-  };
+  rosters?: Array<{
+    team: { id: string };
+    roster?: EspnSummaryRosterEntry[];
+    formation?: string;
+  }>;
 };
 
 type TeamRow = {
@@ -191,12 +191,31 @@ function parseMinute(clock: string, period: number): number | null {
   return base;
 }
 
+const ESPN_NAME_ALIASES: Record<string, string> = {
+  "south korea": "korea republic",
+  "czechia": "czech republic",
+  "north korea": "dpr korea",
+  "ivory coast": "cote d'ivoire",
+  "republic of ireland": "ireland",
+  "trinidad and tobago": "trinidad",
+  "cape verde": "cape verde islands",
+};
+
 function matchesTeam(espnTeam: EspnCompetitor["team"], our: TeamRow): boolean {
   const abbr = espnTeam.abbreviation.toUpperCase();
   const displayLower = espnTeam.displayName.toLowerCase();
   const ourCode = our.fifa_code.toUpperCase();
-  const ourFirstWord = our.name.split(" ")[0].toLowerCase();
-  return abbr === ourCode || displayLower.includes(ourFirstWord);
+  const ourNameLower = our.name.toLowerCase();
+  const ourFirstWord = ourNameLower.split(" ")[0];
+
+  if (abbr === ourCode) return true;
+  if (displayLower === ourNameLower) return true;
+  if (ourFirstWord.length > 3 && displayLower.includes(ourFirstWord)) return true;
+
+  const alias = ESPN_NAME_ALIASES[ourNameLower];
+  if (alias && displayLower.includes(alias)) return true;
+
+  return false;
 }
 
 function findEspnEvent(
@@ -594,7 +613,7 @@ export async function GET(request: NextRequest) {
     if ((lineupCount ?? 0) >= 2) continue;
 
     const summary = await fetchEspnSummary(espnEvt.id);
-    if (!summary?.boxscore?.players?.length) continue;
+    if (!summary?.rosters?.length) continue;
 
     const comp = espnEvt.competitions[0];
     const hComp = comp?.competitors.find((c) => c.homeAway === "home");
@@ -611,22 +630,18 @@ export async function GET(request: NextRequest) {
     });
     const sourceLabel = `${homeTeam.name} vs ${awayTeam.name} · ${dateStr}`;
 
-    for (const teamData of summary.boxscore.players) {
+    for (const teamData of summary.rosters) {
       const ourTeamId = espnIdToTeamId.get(teamData.team.id);
       if (!ourTeamId) continue;
 
       const roster = teamData.roster ?? [];
-      const starters = roster.filter((p) => p.starter);
+      const starters = roster
+        .filter((p) => p.starter)
+        .sort((a, b) => parseInt(a.formationPlace ?? "99") - parseInt(b.formationPlace ?? "99"));
       if (starters.length < 11) continue;
 
-      const formation = deriveFormation(roster);
-      // GK first, then outfield in ESPN order (typically DF → MF → FW)
-      const gk = starters.find((p) => p.position.abbreviation === "GK");
-      const outfield = starters.filter((p) => p.position.abbreviation !== "GK");
-      const startingXi = [
-        ...(gk ? [gk.displayName] : []),
-        ...outfield.map((p) => p.displayName),
-      ];
+      const formation = teamData.formation ?? deriveFormation(roster);
+      const startingXi = starters.map((p) => p.athlete.displayName);
 
       await supabase
         .from("fixture_lineups")

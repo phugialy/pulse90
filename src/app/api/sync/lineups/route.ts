@@ -18,19 +18,21 @@ type EspnEvent = {
   competitions: Array<{ competitors: EspnCompetitor[] }>;
 };
 
-type EspnSummaryRosterEntry = {
+type EspnRosterPlayer = {
   starter: boolean;
-  displayName: string;
+  athlete: { displayName: string };
   position: { abbreviation: string };
+  formationPlace?: string;
+};
+
+type EspnRosterTeam = {
+  team: { id: string };
+  roster?: EspnRosterPlayer[];
+  formation?: string;
 };
 
 type EspnSummary = {
-  boxscore?: {
-    players?: Array<{
-      team: { id: string };
-      roster?: EspnSummaryRosterEntry[];
-    }>;
-  };
+  rosters?: EspnRosterTeam[];
 };
 
 // ---------------------------------------------------------------------------
@@ -60,12 +62,32 @@ async function fetchEspnSummary(espnEventId: string): Promise<EspnSummary | null
   }
 }
 
+// ESPN uses different names for some national teams
+const ESPN_NAME_ALIASES: Record<string, string> = {
+  "south korea": "korea republic",
+  "czechia": "czech republic",
+  "north korea": "dpr korea",
+  "ivory coast": "cote d'ivoire",
+  "republic of ireland": "ireland",
+  "trinidad and tobago": "trinidad",
+  "cape verde": "cape verde islands",
+};
+
 function matchesTeam(espnTeam: EspnCompetitor["team"], our: TeamRow): boolean {
   const abbr = espnTeam.abbreviation.toUpperCase();
   const displayLower = espnTeam.displayName.toLowerCase();
   const ourCode = our.fifa_code.toUpperCase();
-  const ourFirstWord = our.name.split(" ")[0].toLowerCase();
-  return abbr === ourCode || displayLower.includes(ourFirstWord);
+  const ourNameLower = our.name.toLowerCase();
+  const ourFirstWord = ourNameLower.split(" ")[0];
+
+  if (abbr === ourCode) return true;
+  if (displayLower === ourNameLower) return true;
+  if (ourFirstWord.length > 3 && displayLower.includes(ourFirstWord)) return true;
+
+  const alias = ESPN_NAME_ALIASES[ourNameLower];
+  if (alias && displayLower.includes(alias)) return true;
+
+  return false;
 }
 
 function findEspnEvent(events: EspnEvent[], home: TeamRow, away: TeamRow): EspnEvent | undefined {
@@ -79,7 +101,7 @@ function findEspnEvent(events: EspnEvent[], home: TeamRow, away: TeamRow): EspnE
   });
 }
 
-function deriveFormation(players: EspnSummaryRosterEntry[]): string {
+function deriveFormation(players: EspnRosterPlayer[]): string {
   const starters = players.filter((p) => p.starter);
   let df = 0, mf = 0, fw = 0;
   for (const p of starters) {
@@ -212,8 +234,8 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      if (!summary?.boxscore?.players?.length) {
-        log.push(`#${fixture.match_number}: ESPN summary returned no boxscore`);
+      if (!summary?.rosters?.length) {
+        log.push(`#${fixture.match_number}: ESPN summary returned no rosters`);
         continue;
       }
 
@@ -228,24 +250,22 @@ export async function GET(request: NextRequest) {
       const dateLabel = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
       const sourceLabel = `${homeTeam.name} vs ${awayTeam.name} · ${dateLabel}`;
 
-      for (const teamData of summary.boxscore.players) {
+      for (const teamData of summary.rosters) {
         const ourTeamId = espnIdToTeamId.get(teamData.team.id);
         if (!ourTeamId) continue;
 
         const roster = teamData.roster ?? [];
-        const starters = roster.filter((p) => p.starter);
+        const starters = roster
+          .filter((p) => p.starter)
+          .sort((a, b) => parseInt(a.formationPlace ?? "99") - parseInt(b.formationPlace ?? "99"));
+
         if (starters.length < 11) {
           log.push(`#${fixture.match_number} (team ${ourTeamId}): only ${starters.length} starters in ESPN data`);
           continue;
         }
 
-        const formation = deriveFormation(roster);
-        const gk = starters.find((p) => p.position.abbreviation === "GK");
-        const outfield = starters.filter((p) => p.position.abbreviation !== "GK");
-        const startingXi = [
-          ...(gk ? [gk.displayName] : []),
-          ...outfield.map((p) => p.displayName),
-        ];
+        const formation = teamData.formation ?? deriveFormation(roster);
+        const startingXi = starters.map((p) => p.athlete.displayName);
 
         await supabase.from("fixture_lineups").upsert(
           {
