@@ -18,6 +18,7 @@ type FixtureCardRow = {
   match_number: number;
   status: "scheduled" | "live" | "completed" | "postponed" | "cancelled";
   minute: number | null;
+  period_display: string | null;
   starts_at: string;
   stage: string;
   group_code: string | null;
@@ -141,6 +142,7 @@ export type MatchCenterTeam = {
   flagEmoji: string;
   formation?: string;
   startingXi?: string[];
+  lineupSource?: string | null;
   group: string;
   history: RecentTeamMatch[];
   name: string;
@@ -850,6 +852,7 @@ export async function getTodayDashboard() {
           homeScore,
           awayScore,
           minute: m.minute ?? null,
+          periodDisplay: row?.period_display ?? null,
           group: m.group,
           homeFlagEmoji: m.homeFlagEmoji ?? "🏳",
           homeFlagAssetUrl: m.homeFlagAssetUrl ?? null,
@@ -882,6 +885,7 @@ export async function getTodayDashboard() {
       homeScore: 0,
       awayScore: 0,
       minute: null,
+      periodDisplay: null,
       group: nextUpRow.group_code ? `Group ${nextUpRow.group_code}` : nextUpRow.stage,
       homeFlagEmoji: homeFlag?.emoji ?? "🏳",
       homeFlagAssetUrl: homeFlag?.assetUrl ?? null,
@@ -928,6 +932,7 @@ export type LiveBoardMatch = {
   homeScore: number | null;
   awayScore: number | null;
   minute: string | null;
+  periodDisplay: string | null;
   group: string;
   homeFlagEmoji: string;
   homeFlagAssetUrl: string | null;
@@ -1302,7 +1307,7 @@ export async function getMatchCenter(matchNumber: string) {
       .order("probability", { ascending: false }),
     supabase
       .from("fixture_lineups")
-      .select("team_id, formation, starting_xi")
+      .select("team_id, formation, starting_xi, source_label")
       .eq("fixture_id", fixture.id),
   ]);
   const teamRows = teamsResult.error ? [] : (teamsResult.data as MatchCenterTeamRow[]);
@@ -1324,17 +1329,19 @@ export async function getMatchCenter(matchNumber: string) {
     getVoteTally(supabase, fixture.id, homeTeamRow?.id ?? null, awayTeamRow?.id ?? null),
   ]);
 
-  type LineupRow = { team_id: string; formation: string | null; starting_xi: string[] | null };
+  type LineupRow = { team_id: string; formation: string | null; starting_xi: string[] | null; source_label: string | null };
   const lineups = (lineupsResult.data ?? []) as LineupRow[];
   if (homeTeam) {
     const l = lineups.find((r) => r.team_id === homeTeamRow?.id);
     if (l?.formation) homeTeam.formation = l.formation;
     if (l?.starting_xi?.length) homeTeam.startingXi = l.starting_xi;
+    if (l?.source_label) homeTeam.lineupSource = l.source_label;
   }
   if (awayTeam) {
     const l = lineups.find((r) => r.team_id === awayTeamRow?.id);
     if (l?.formation) awayTeam.formation = l.formation;
     if (l?.starting_xi?.length) awayTeam.startingXi = l.starting_xi;
+    if (l?.source_label) awayTeam.lineupSource = l.source_label;
   }
   const groupTable = groupResult.error
     ? []

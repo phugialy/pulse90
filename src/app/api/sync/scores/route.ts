@@ -13,10 +13,26 @@ type FixtureRow = {
   status: string;
   group_code: string | null;
   minute: number | null;
+  period_display: string | null;
   home_score: number | null;
   away_score: number | null;
   home_team_id: string;
   away_team_id: string;
+};
+
+type EspnSummaryRosterEntry = {
+  starter: boolean;
+  displayName: string;
+  position: { abbreviation: string };
+};
+
+type EspnSummary = {
+  boxscore?: {
+    players?: Array<{
+      team: { id: string };
+      roster?: EspnSummaryRosterEntry[];
+    }>;
+  };
 };
 
 type TeamRow = {
@@ -83,6 +99,20 @@ const PRE_MATCH_MINUTES = 5;
 // ESPN fetch
 // ---------------------------------------------------------------------------
 
+async function fetchEspnSummary(espnEventId: string): Promise<EspnSummary | null> {
+  try {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=${espnEventId}`;
+    const resp = await fetch(url, {
+      headers: { "User-Agent": "pulse90-sync/1.0" },
+      cache: "no-store",
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as EspnSummary;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchEspnScores(): Promise<EspnEvent[]> {
   const base = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
 
@@ -119,6 +149,23 @@ async function fetchEspnScores(): Promise<EspnEvent[]> {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function toPeriodDisplay(espn: EspnStatus): string | null {
+  return espn.type.name === "STATUS_HALFTIME" ? "HT" : null;
+}
+
+function deriveFormation(players: EspnSummaryRosterEntry[]): string {
+  const starters = players.filter((p) => p.starter);
+  let df = 0, mf = 0, fw = 0;
+  for (const p of starters) {
+    const abbr = p.position.abbreviation;
+    if (["CB","LB","RB","LWB","RWB","SW","FB","D","DF"].includes(abbr)) df++;
+    else if (["CDM","CM","CAM","LM","RM","DM","AM","M","MF"].includes(abbr)) mf++;
+    else if (["ST","CF","LW","RW","SS","FW","F"].includes(abbr)) fw++;
+  }
+  if (df + mf + fw < 9) return "4-3-3";
+  return `${df}-${mf}-${fw}`;
+}
 
 function toOurStatus(
   espn: EspnStatus,
@@ -276,7 +323,7 @@ export async function GET(request: NextRequest) {
     supabase
       .from("fixtures")
       .select(
-        "id, tournament_id, match_number, starts_at, status, group_code, minute, home_score, away_score, home_team_id, away_team_id",
+        "id, tournament_id, match_number, starts_at, status, group_code, minute, period_display, home_score, away_score, home_team_id, away_team_id",
       )
       .in("status", ["live", "scheduled"])
       .lte("starts_at", preMatchCutoff.toISOString())
@@ -418,6 +465,7 @@ export async function GET(request: NextRequest) {
       espnEvt.status.displayClock,
       espnEvt.status.period,
     );
+    const newPeriodDisplay = toPeriodDisplay(espnEvt.status);
 
     const homeScoreVal = isNaN(newHomeScore!) ? null : newHomeScore;
     const awayScoreVal = isNaN(newAwayScore!) ? null : newAwayScore;
@@ -426,7 +474,8 @@ export async function GET(request: NextRequest) {
       homeScoreVal !== fixture.home_score ||
       awayScoreVal !== fixture.away_score ||
       newStatus !== fixture.status ||
-      newMinute !== fixture.minute;
+      newMinute !== fixture.minute ||
+      newPeriodDisplay !== fixture.period_display;
 
     if (scoreChanged) {
       await supabase
@@ -436,6 +485,7 @@ export async function GET(request: NextRequest) {
           away_score: awayScoreVal,
           status: newStatus,
           minute: newMinute,
+          period_display: newPeriodDisplay,
           source_updated_at: now.toISOString(),
           updated_at: now.toISOString(),
         })
@@ -523,6 +573,80 @@ export async function GET(request: NextRequest) {
   }
 
   // ------------------------------------------------------------------
+  // Lineup sync: one-shot per fixture from ESPN summary endpoint
+  // Skip fixtures that already have both team lineups stored (count >= 2)
+  // ------------------------------------------------------------------
+  let lineupsUpserted = 0;
+
+  for (const fixture of windowFixtures) {
+    const homeTeam = teamMap.get(fixture.home_team_id);
+    const awayTeam = teamMap.get(fixture.away_team_id);
+    if (!homeTeam || !awayTeam) continue;
+
+    const espnEvt = findEspnEvent(espnEvents, homeTeam, awayTeam);
+    if (!espnEvt) continue;
+
+    const { count: lineupCount } = await supabase
+      .from("fixture_lineups")
+      .select("id", { count: "exact", head: true })
+      .eq("fixture_id", fixture.id);
+
+    if ((lineupCount ?? 0) >= 2) continue;
+
+    const summary = await fetchEspnSummary(espnEvt.id);
+    if (!summary?.boxscore?.players?.length) continue;
+
+    const comp = espnEvt.competitions[0];
+    const hComp = comp?.competitors.find((c) => c.homeAway === "home");
+    const aComp = comp?.competitors.find((c) => c.homeAway === "away");
+    const espnIdToTeamId = new Map<string, string>();
+    if (hComp) espnIdToTeamId.set(hComp.team.id, fixture.home_team_id);
+    if (aComp) espnIdToTeamId.set(aComp.team.id, fixture.away_team_id);
+
+    const startsAt = new Date(fixture.starts_at);
+    const dateStr = startsAt.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    });
+    const sourceLabel = `${homeTeam.name} vs ${awayTeam.name} · ${dateStr}`;
+
+    for (const teamData of summary.boxscore.players) {
+      const ourTeamId = espnIdToTeamId.get(teamData.team.id);
+      if (!ourTeamId) continue;
+
+      const roster = teamData.roster ?? [];
+      const starters = roster.filter((p) => p.starter);
+      if (starters.length < 11) continue;
+
+      const formation = deriveFormation(roster);
+      // GK first, then outfield in ESPN order (typically DF → MF → FW)
+      const gk = starters.find((p) => p.position.abbreviation === "GK");
+      const outfield = starters.filter((p) => p.position.abbreviation !== "GK");
+      const startingXi = [
+        ...(gk ? [gk.displayName] : []),
+        ...outfield.map((p) => p.displayName),
+      ];
+
+      await supabase
+        .from("fixture_lineups")
+        .upsert(
+          {
+            fixture_id: fixture.id,
+            team_id: ourTeamId,
+            formation,
+            starting_xi: startingXi,
+            source_label: sourceLabel,
+            espn_event_id: espnEvt.id,
+            updated_at: now.toISOString(),
+          },
+          { onConflict: "fixture_id,team_id" },
+        );
+      lineupsUpserted++;
+    }
+  }
+
+  // ------------------------------------------------------------------
   // Log the run
   // ------------------------------------------------------------------
   await writeJobRun(supabase, {
@@ -537,6 +661,7 @@ export async function GET(request: NextRequest) {
       espnEventsFound: espnEvents.length,
       fixtures: updated,
       eventsBackfilled,
+      lineupsUpserted,
     },
   });
 
@@ -546,6 +671,7 @@ export async function GET(request: NextRequest) {
     activeFixtures: windowFixtures.length,
     updated,
     eventsBackfilled,
+    lineupsUpserted,
     durationMs: Date.now() - startedAt,
   });
 }

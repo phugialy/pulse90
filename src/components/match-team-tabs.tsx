@@ -102,6 +102,11 @@ function TeamPanel({ team, teamEvents }: TeamPanelProps) {
           <p className="mt-1 text-sm font-bold text-white/55">
             {hasStartingXi ? "Starting XI" : "Predicted"} · {preset.name}
           </p>
+          {team.lineupSource && (
+            <p className="mt-0.5 text-[11px] font-bold text-white/35">
+              Updated as of {team.lineupSource}
+            </p>
+          )}
         </div>
         <Link
           className="shrink-0 rounded-full border border-white/14 bg-white/8 px-3 py-2 text-xs font-black text-white/68 transition hover:bg-white/15"

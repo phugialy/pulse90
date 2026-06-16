@@ -123,6 +123,7 @@ export function PriorityMatch({
   // ── LIVE MODE ────────────────────────────────────────────────────
   if (heroLive != null) {
     const isPreMatch = heroLive.isPreMatch ?? false;
+    const isHalfTime = heroLive.periodDisplay === "HT";
     const homeScore = heroLive.homeScore ?? 0;
     const awayScore = heroLive.awayScore ?? 0;
 
@@ -143,29 +144,37 @@ export function PriorityMatch({
         : null;
 
     return (
-      <section className="overflow-hidden rounded-[28px] bg-[#10131a] text-white shadow-[0_0_0_2px_rgba(239,68,68,0.6),0_0_60px_rgba(239,68,68,0.18),0_24px_70px_rgba(16,19,26,0.3)]">
+      <section className={`overflow-hidden rounded-[28px] bg-[#10131a] text-white ${
+        isHalfTime
+          ? "shadow-[0_0_0_2px_rgba(245,158,11,0.5),0_0_60px_rgba(245,158,11,0.10),0_24px_70px_rgba(16,19,26,0.3)]"
+          : "shadow-[0_0_0_2px_rgba(239,68,68,0.6),0_0_60px_rgba(239,68,68,0.18),0_24px_70px_rgba(16,19,26,0.3)]"
+      }`}>
         {/* Broadcast bar */}
-        <div className="flex items-center justify-between gap-3 bg-red-600 px-6 py-2.5">
+        <div className={`flex items-center justify-between gap-3 px-6 py-2.5 ${isHalfTime ? "bg-amber-500" : "bg-red-600"}`}>
           <div className="flex items-center gap-2">
-            <span className="relative flex size-2.5 shrink-0">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-              <span className="relative inline-flex size-2.5 rounded-full bg-white" />
-            </span>
+            {!isHalfTime && !isPreMatch && (
+              <span className="relative flex size-2.5 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+                <span className="relative inline-flex size-2.5 rounded-full bg-white" />
+              </span>
+            )}
             <span className="text-xs font-black uppercase tracking-[0.22em] text-white">
               {isPreMatch
                 ? `Kick off in ${heroLive.minutesUntilKickoff ?? "?"} min`
-                : "Live now"}
+                : isHalfTime
+                  ? "Half time"
+                  : "Live now"}
             </span>
           </div>
           <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-black text-white tabular-nums">
-            {isPreMatch ? "Pre-match" : (heroLive.minute ?? "Live")}
+            {isPreMatch ? "Pre-match" : isHalfTime ? "HT" : (heroLive.minute ?? "Live")}
           </span>
         </div>
 
         {/* Top meta */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-5">
           <span className="text-xs font-black uppercase tracking-[0.22em] text-white/50">
-            {isPreMatch ? "Up next" : "Live match"}
+            {isPreMatch ? "Up next" : isHalfTime ? "Half time" : "Live match"}
           </span>
           <span className="rounded-full bg-white/8 px-3 py-1 text-xs font-black text-white/55">
             {heroLive.group}
@@ -189,14 +198,16 @@ export function PriorityMatch({
               className={`font-black tabular-nums ${
                 isPreMatch
                   ? "text-4xl text-white/60"
-                  : "text-5xl text-red-400 drop-shadow-[0_0_18px_rgba(248,113,113,0.55)] sm:text-6xl"
+                  : isHalfTime
+                    ? "text-5xl text-amber-300/80 sm:text-6xl"
+                    : "text-5xl text-red-400 drop-shadow-[0_0_18px_rgba(248,113,113,0.55)] sm:text-6xl"
               }`}
             >
               {homeScore} — {awayScore}
             </span>
             {!isPreMatch && (
-              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-red-400/70">
-                in play
+              <span className={`text-[10px] font-black uppercase tracking-[0.18em] ${isHalfTime ? "text-amber-400/60" : "text-red-400/70"}`}>
+                {isHalfTime ? "half time" : "in play"}
               </span>
             )}
           </div>
@@ -266,7 +277,11 @@ export function PriorityMatch({
         {/* Bottom bar */}
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/8 px-6 py-4">
           <span className="text-xs font-bold text-white/30">
-            {isPreMatch ? "Starting soon · auto-switches to live" : "Score updates every 2 min"}
+            {isPreMatch
+              ? "Starting soon · auto-switches to live"
+              : isHalfTime
+                ? "Resumes in 2nd half · updates every 2 min"
+                : "Score updates every 2 min"}
           </span>
           <div className="flex gap-2">
             <Link
