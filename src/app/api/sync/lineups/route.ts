@@ -92,9 +92,21 @@ function deriveFormation(players: EspnSummaryRosterEntry[]): string {
   return `${df}-${mf}-${fw}`;
 }
 
+// Shallow-inspect an unknown object — return its keys + first element of any array
+function shallowInspect(obj: unknown, depth = 2): unknown {
+  if (depth === 0 || obj === null || typeof obj !== "object") return obj;
+  if (Array.isArray(obj)) {
+    return { _array_length: obj.length, _first: shallowInspect(obj[0], depth - 1) };
+  }
+  return Object.fromEntries(
+    Object.entries(obj as Record<string, unknown>).map(([k, v]) => [k, shallowInspect(v, depth - 1)]),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Route handler — manual backfill trigger
 // Hit: /api/sync/lineups?secret=CRON_SECRET&lookbackDays=30
+// Add ?debug=1 to inspect raw ESPN summary structure for the first matched event
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest) {
@@ -111,6 +123,8 @@ export async function GET(request: NextRequest) {
   if (!supabase) {
     return NextResponse.json({ error: "No admin DB client" }, { status: 503 });
   }
+
+  const debug = request.nextUrl.searchParams.get("debug") === "1";
 
   const lookbackDays = Math.min(
     parseInt(request.nextUrl.searchParams.get("lookbackDays") ?? "30", 10),
@@ -186,6 +200,18 @@ export async function GET(request: NextRequest) {
       }
 
       const summary = await fetchEspnSummary(espnEvt.id);
+
+      // Debug mode: return raw structure of first summary so we can fix parsing
+      if (debug) {
+        return NextResponse.json({
+          debug: true,
+          matchNumber: fixture.match_number,
+          espnEventId: espnEvt.id,
+          summaryKeys: summary ? Object.keys(summary) : null,
+          structure: shallowInspect(summary, 4),
+        });
+      }
+
       if (!summary?.boxscore?.players?.length) {
         log.push(`#${fixture.match_number}: ESPN summary returned no boxscore`);
         continue;
