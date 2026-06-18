@@ -15,16 +15,17 @@ export default function Icon() {
           alignItems: "center",
           justifyContent: "center",
           borderRadius: "50%",
-          border: "2px solid #3b82f6",
+          border: "2.5px solid #3b82f6",
         }}
       >
         <span
           style={{
-            color: "#3b82f6",
-            fontSize: 13,
+            color: "#ffffff",
+            fontSize: 14,
             fontWeight: 900,
             fontFamily: "system-ui, sans-serif",
             letterSpacing: "-0.5px",
+            marginTop: 1,
           }}
         >
           90
