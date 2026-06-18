@@ -562,6 +562,27 @@ export async function GET(request: NextRequest) {
   }
 
   // ------------------------------------------------------------------
+  // Auto-promote: scheduled fixtures past kickoff that ESPN couldn't match
+  // Prevents status getting stuck at 'scheduled' when ESPN matching fails.
+  // ------------------------------------------------------------------
+  const autoPromote = windowFixtures.filter(
+    (f) => f.status === "scheduled" && new Date(f.starts_at).getTime() + 60_000 < now.getTime(),
+  );
+  for (const fixture of autoPromote) {
+    await supabase
+      .from("fixtures")
+      .update({ status: "live", updated_at: now.toISOString() })
+      .eq("id", fixture.id);
+    updated.push({
+      matchNumber: fixture.match_number,
+      home: fixture.home_score,
+      away: fixture.away_score,
+      status: "live (auto-promoted)",
+      minute: fixture.minute,
+    });
+  }
+
+  // ------------------------------------------------------------------
   // Event backfill: completed today fixtures that still need events
   // ------------------------------------------------------------------
   let eventsBackfilled = 0;

@@ -659,6 +659,7 @@ function fallbackToday() {
     liveMatches,
     liveBoardMatches: [] as LiveBoardMatch[],
     heroLive: null as LiveBoardMatch | null,
+    hasMatchWindow: false,
     todayMatches,
     tomorrowMatches,
     updates,
@@ -899,11 +900,19 @@ export async function getTodayDashboard() {
     };
   })();
 
+  // Keep LiveRefresh alive during the full match window even if ESPN matching fails
+  // and status stays stuck at 'scheduled'. Window = 15 min pre-kick to 130 min post-kick.
+  const hasMatchWindow = rawRows.some((r) => {
+    const start = new Date(r.starts_at).getTime();
+    return start <= now.getTime() + 15 * 60_000 && start >= now.getTime() - 130 * 60_000;
+  });
+
   return {
     source: "supabase" as const,
     liveMatches: mappedLive,
     liveBoardMatches,
     heroLive,
+    hasMatchWindow,
     todayMatches: upcoming.length ? upcoming : todayMatches,
     tomorrowMatches: tomorrowItems.length ? tomorrowItems : tomorrowMatches,
     updates: [],

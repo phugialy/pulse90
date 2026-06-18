@@ -23,7 +23,7 @@ export default async function Home() {
 
   return (
     <AppShell>
-      <LiveRefresh isLive={dashboard.liveMatches.length > 0} />
+      <LiveRefresh isLive={dashboard.liveMatches.length > 0 || dashboard.hasMatchWindow} />
       <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8">
         <section className="min-w-0 space-y-5">
           <PageIntro
