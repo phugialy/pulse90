@@ -50,14 +50,13 @@ export default function Image() {
                 width: 52,
                 height: 52,
                 borderRadius: "50%",
-                background: "#10131a",
-                border: "2.5px solid #3b82f6",
+                background: "#f7d149",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <span style={{ color: "#3b82f6", fontSize: 18, fontWeight: 900, letterSpacing: "-0.5px" }}>90</span>
+              <span style={{ color: "#10131a", fontSize: 20, fontWeight: 900, letterSpacing: "-0.5px" }}>90</span>
             </div>
             <span style={{ color: "#ffffff", fontSize: 40, fontWeight: 900, letterSpacing: "-2px", lineHeight: 1 }}>
               Pulse90

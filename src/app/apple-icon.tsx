@@ -15,26 +15,24 @@ export default function AppleIcon() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
+          gap: 10,
         }}
       >
-        {/* Outer ring */}
         <div
           style={{
-            position: "relative",
-            width: 148,
-            height: 148,
+            width: 132,
+            height: 132,
+            borderRadius: "50%",
+            background: "#f7d149",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            borderRadius: "50%",
-            border: "5px solid #3b82f6",
-            background: "rgba(59,130,246,0.06)",
           }}
         >
           <span
             style={{
-              color: "#ffffff",
-              fontSize: 62,
+              color: "#10131a",
+              fontSize: 58,
               fontWeight: 900,
               fontFamily: "system-ui, sans-serif",
               letterSpacing: "-2px",
@@ -47,12 +45,11 @@ export default function AppleIcon() {
         </div>
         <span
           style={{
-            color: "#3b82f6",
-            fontSize: 18,
+            color: "#f7d149",
+            fontSize: 16,
             fontWeight: 800,
             fontFamily: "system-ui, sans-serif",
             letterSpacing: "5px",
-            marginTop: 10,
           }}
         >
           PULSE

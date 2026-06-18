@@ -7,10 +7,8 @@ import { NavLinks } from "@/components/nav-links";
 export function PulseLogo() {
   return (
     <Link className="flex items-center gap-3" href="/">
-      <div className="relative grid size-11 place-items-center rounded-full border border-[#10131a]/10 bg-lime text-black shadow-[0_12px_30px_rgba(17,24,39,0.14)]">
-        <span className="absolute h-px w-8 bg-black/70" />
-        <span className="absolute h-8 w-px bg-black/30" />
-        <span className="relative text-sm font-black tracking-tighter">90</span>
+      <div className="grid size-11 place-items-center rounded-full bg-lime shadow-[0_4px_20px_rgba(247,209,73,0.4)]">
+        <span className="text-base font-black tracking-tighter text-[#10131a]">90</span>
       </div>
       <div>
         <p className="text-lg font-black tracking-tight text-[#10131a]">Pulse90</p>
