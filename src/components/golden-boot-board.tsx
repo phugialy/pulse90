@@ -83,12 +83,11 @@ function LeaderHero({ player }: { player: GoldenBootPlayer }) {
           </div>
         </div>
 
-        {/* Stat chips */}
-        <div className="mt-5 grid grid-cols-3 gap-3">
+        {/* Stat chips — Penalties + Goals only */}
+        <div className="mt-5 grid grid-cols-2 gap-3">
           {[
+            { label: "Goals", value: player.goalCount },
             { label: "Penalties", value: player.penaltyCount },
-            { label: "Games", value: player.teamMatchesPlayed },
-            { label: "Per game", value: perGame },
           ].map(({ label, value }) => (
             <div key={label} className="rounded-2xl bg-white/5 p-3 text-center">
               <p className="text-xl font-black text-white">{value}</p>
@@ -97,22 +96,42 @@ function LeaderHero({ player }: { player: GoldenBootPlayer }) {
           ))}
         </div>
 
-        {/* Goal timeline pills */}
-        {player.timeline.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {player.timeline.map((g, i) => (
-              <span
-                key={i}
-                className="flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1 text-xs font-bold text-white/55"
-              >
-                <span className={`size-1.5 rounded-full ${g.isPenalty ? "bg-amber-300" : "bg-amber-400"}`} />
-                {stageLabel(g.stage)} vs {g.opponent}
-                {g.minute != null ? ` ${g.minute}${g.stoppageMinute ? `+${g.stoppageMinute}` : ""}'` : ""}
-                {g.isPenalty ? " (P)" : ""}
-              </span>
-            ))}
-          </div>
-        )}
+        {/* Per-match breakdown */}
+        {player.timeline.length > 0 && (() => {
+          const byMatch = player.timeline.reduce<Record<number, typeof player.timeline>>((acc, g) => {
+            (acc[g.matchNumber] ??= []).push(g);
+            return acc;
+          }, {});
+          return (
+            <div className="mt-4 grid gap-2">
+              {Object.entries(byMatch).map(([matchNum, goals]) => {
+                const first = goals[0];
+                return (
+                  <div key={matchNum} className="rounded-2xl bg-white/5 px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/38">
+                      {stageLabel(first.stage)} · {player.teamName} vs {first.opponent}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {goals.map((g, i) => (
+                        <span
+                          key={i}
+                          className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-black ${
+                            g.isPenalty
+                              ? "bg-amber-300/15 text-amber-300"
+                              : "bg-amber-400/15 text-amber-400"
+                          }`}
+                        >
+                          ⚽ {g.minute ?? "—"}{g.stoppageMinute ? `+${g.stoppageMinute}` : ""}′
+                          {g.isPenalty ? " (P)" : ""}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
