@@ -1680,9 +1680,10 @@ export async function getGoldenBootStandings(): Promise<{
 
     const fixture = ev.fixture_id ? fixtureMap.get(ev.fixture_id) : null;
     const isPenalty = ev.event_type === "penalty_goal";
-    const opponent = fixture && ev.team_id
-      ? (fixture.home_team_id === ev.team_id ? fixture.away_team : fixture.home_team) ?? ""
-      : "";
+    const opponentTeamId = fixture && ev.team_id
+      ? (fixture.home_team_id === ev.team_id ? fixture.away_team_id : fixture.home_team_id)
+      : null;
+    const opponent = opponentTeamId ? (teamMap.get(opponentTeamId)?.name ?? "") : "";
 
     const goal: GoldenBootGoal = {
       matchNumber: fixture?.match_number ?? 0,
