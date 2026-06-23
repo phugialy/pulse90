@@ -240,6 +240,29 @@ export type GoldenBootEntry = {
   flagAssetUrl?: string | null;
 };
 
+export type GoldenBootGoal = {
+  matchNumber: number;
+  stage: string;
+  opponent: string;
+  minute: number | null;
+  stoppageMinute: number | null;
+  isPenalty: boolean;
+};
+
+export type GoldenBootPlayer = {
+  rank: number;
+  name: string;
+  teamId: string;
+  teamName: string;
+  confederation: string;
+  flagEmoji: string;
+  flagAssetUrl: string | null;
+  goalCount: number;
+  penaltyCount: number;
+  teamMatchesPlayed: number;
+  timeline: GoldenBootGoal[];
+};
+
 export type UpcomingMatchPrediction = {
   fixtureId: string;
   matchNumber: number;
@@ -1595,6 +1618,108 @@ export async function getPredictionsHub() {
   );
 
   return { goldenBoot, upcomingMatches, tournamentPredictions };
+}
+
+export async function getGoldenBootStandings(): Promise<{
+  players: GoldenBootPlayer[];
+  hasLiveGame: boolean;
+}> {
+  const supabase = getSupabaseReadClient();
+  if (!supabase) return { players: [], hasLiveGame: false };
+
+  const [eventsResult, fixturesResult, teamsResult] = await Promise.all([
+    supabase
+      .from("match_events")
+      .select("title, event_type, team_id, fixture_id, minute, stoppage_minute")
+      .in("event_type", ["goal", "penalty_goal"])
+      .order("minute", { ascending: true }),
+    supabase
+      .from("fixture_cards_view")
+      .select("id, match_number, stage, home_team, away_team, home_team_id, away_team_id, status")
+      .in("status", ["completed", "live"]),
+    supabase.from("teams").select("id, name, flag_emoji, flag_asset_url, confederation"),
+  ]);
+
+  if (!eventsResult.data) return { players: [], hasLiveGame: false };
+
+  type GoalEvent = {
+    title: string; event_type: string; team_id: string | null;
+    fixture_id: string | null; minute: number | null; stoppage_minute: number | null;
+  };
+  type GBFixture = {
+    id: string; match_number: number; stage: string; status: string;
+    home_team: string | null; away_team: string | null;
+    home_team_id: string | null; away_team_id: string | null;
+  };
+  type GBTeam = { id: string; name: string; flag_emoji: string | null; flag_asset_url: string | null; confederation: string | null };
+
+  const fixtureMap = new Map<string, GBFixture>();
+  for (const f of (fixturesResult.data ?? []) as GBFixture[]) fixtureMap.set(f.id, f);
+
+  const teamMap = new Map<string, GBTeam>();
+  for (const t of (teamsResult.data ?? []) as GBTeam[]) teamMap.set(t.id, t);
+
+  const teamMatchesPlayed = new Map<string, number>();
+  for (const f of fixtureMap.values()) {
+    if (f.status !== "completed") continue;
+    if (f.home_team_id) teamMatchesPlayed.set(f.home_team_id, (teamMatchesPlayed.get(f.home_team_id) ?? 0) + 1);
+    if (f.away_team_id) teamMatchesPlayed.set(f.away_team_id, (teamMatchesPlayed.get(f.away_team_id) ?? 0) + 1);
+  }
+
+  const hasLiveGame = (fixturesResult.data ?? []).some((f: { status: string }) => f.status === "live");
+
+  const stripMinute = (s: string) => s.replace(/\s+\d+(\+\d+)?'$/, "").trim();
+
+  type Accum = { teamId: string | null; penaltyCount: number; timeline: GoldenBootGoal[] };
+  const playerMap = new Map<string, Accum>();
+
+  for (const ev of (eventsResult.data ?? []) as GoalEvent[]) {
+    if (!ev.title) continue;
+    const name = stripMinute(ev.title);
+    if (!name || name === "Unknown") continue;
+
+    const fixture = ev.fixture_id ? fixtureMap.get(ev.fixture_id) : null;
+    const isPenalty = ev.event_type === "penalty_goal";
+    const opponent = fixture && ev.team_id
+      ? (fixture.home_team_id === ev.team_id ? fixture.away_team : fixture.home_team) ?? ""
+      : "";
+
+    const goal: GoldenBootGoal = {
+      matchNumber: fixture?.match_number ?? 0,
+      stage: fixture?.stage ?? "group",
+      opponent,
+      minute: ev.minute,
+      stoppageMinute: ev.stoppage_minute,
+      isPenalty,
+    };
+
+    if (!playerMap.has(name)) playerMap.set(name, { teamId: ev.team_id, penaltyCount: 0, timeline: [] });
+    const acc = playerMap.get(name)!;
+    if (isPenalty) acc.penaltyCount++;
+    acc.timeline.push(goal);
+  }
+
+  const players: GoldenBootPlayer[] = Array.from(playerMap.entries())
+    .map(([name, acc]) => {
+      const team = acc.teamId ? teamMap.get(acc.teamId) : null;
+      return {
+        rank: 0,
+        name,
+        teamId: acc.teamId ?? "",
+        teamName: team?.name ?? "",
+        confederation: team?.confederation ?? "",
+        flagEmoji: team?.flag_emoji ?? "🏳",
+        flagAssetUrl: team?.flag_asset_url ?? null,
+        goalCount: acc.timeline.length,
+        penaltyCount: acc.penaltyCount,
+        teamMatchesPlayed: acc.teamId ? (teamMatchesPlayed.get(acc.teamId) ?? 1) : 1,
+        timeline: acc.timeline,
+      };
+    })
+    .sort((a, b) => b.goalCount - a.goalCount || a.name.localeCompare(b.name))
+    .map((p, i) => ({ ...p, rank: i + 1 }));
+
+  return { players, hasLiveGame };
 }
 
 export async function getGroupsBoard() {

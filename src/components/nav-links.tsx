@@ -9,6 +9,7 @@ export const navItems = [
   { label: "Groups", href: "/groups" },
   { label: "Teams", href: "/teams" },
   { label: "Predictions", href: "/predictions" },
+  { label: "Golden Boot", href: "/golden-boot" },
 ];
 
 export function NavLinks() {

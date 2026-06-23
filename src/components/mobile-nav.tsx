@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Home, Menu, Shield, Sparkles, Users, X } from "lucide-react";
+import { CalendarDays, Home, Menu, Shield, Sparkles, Trophy, Users, X } from "lucide-react";
 import { DonateMenu } from "@/components/donate-menu";
 import { InstallAppCta } from "@/components/install-app-cta";
 import { navItems } from "@/components/nav-links";
 
 const navIcons = {
   Fixtures: CalendarDays,
+  "Golden Boot": Trophy,
   Groups: Shield,
   Predictions: Sparkles,
   Teams: Users,
