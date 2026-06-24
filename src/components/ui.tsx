@@ -28,6 +28,7 @@ import {
   type Team,
 } from "@/lib/mock-data";
 import type { ActiveGroup, LiveBoardMatch } from "@/lib/pulse90-data";
+import { ShareButton } from "@/components/share-button";
 
 function FlagImg({
   src,
@@ -284,6 +285,18 @@ export function PriorityMatch({
                 : "Score updates every 2 min"}
           </span>
           <div className="flex gap-2">
+            <ShareButton
+              title={`${heroLive.home} vs ${heroLive.away} · Pulse90`}
+              text={
+                isPreMatch
+                  ? `${heroLive.home} vs ${heroLive.away} kicks off in ${heroLive.minutesUntilKickoff ?? "a few"} min — watching on Pulse90`
+                  : isHalfTime
+                    ? `Half time: ${heroLive.home} ${homeScore}–${awayScore} ${heroLive.away} — following on Pulse90`
+                    : `${heroLive.home} ${homeScore}–${awayScore} ${heroLive.away} · ${heroLive.minute ?? "Live"} — watching on Pulse90`
+              }
+              className="inline-flex h-9 items-center gap-2 rounded-full bg-white/12 px-4 text-sm font-black text-white transition hover:bg-white/20"
+              label="Share"
+            />
             <Link
               className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-4 text-sm font-black text-[#10131a] transition hover:bg-red-50"
               href={`/matches/${heroLive.matchNumber}`}
@@ -425,6 +438,16 @@ export function PriorityMatch({
           <span className="text-xs font-bold text-white/30">Prediction pending</span>
         )}
         <div className="flex gap-2">
+          <ShareButton
+            title={`${match.home} vs ${match.away} · Pulse90`}
+            text={
+              isLive
+                ? `${match.home} ${match.score} ${match.away} · Live — watching on Pulse90`
+                : `${match.home} vs ${match.away} · ${match.time ?? ""} — on Pulse90`
+            }
+            className="inline-flex h-9 items-center gap-2 rounded-full bg-white/12 px-4 text-sm font-black text-white transition hover:bg-white/20"
+            label="Share"
+          />
           <Link
             className={`inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-black transition ${
               isLive

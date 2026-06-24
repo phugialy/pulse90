@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import type { GoldenBootPlayer } from "@/lib/pulse90-data";
+import { ShareButton } from "@/components/share-button";
 
 type SortKey = "goals" | "per_game";
 type StageKey = "all" | "group" | "knockout";
@@ -56,9 +57,18 @@ function LeaderHero({ player }: { player: GoldenBootPlayer }) {
         <span className="text-xs font-black uppercase tracking-[0.22em] text-amber-900">
           🏆 Golden Boot Leader
         </span>
-        <span className="rounded-full bg-amber-900/15 px-3 py-1 text-xs font-black text-amber-900">
-          Rank #1
-        </span>
+        <div className="flex items-center gap-2">
+          <ShareButton
+            title={`${player.name} · Golden Boot · Pulse90`}
+            text={`${player.name} leads the Golden Boot with ${player.goalCount} goal${player.goalCount !== 1 ? "s" : ""} — ${player.teamName} · FIFA World Cup 2026`}
+            path="/golden-boot"
+            className="inline-flex h-7 items-center gap-1.5 rounded-full bg-amber-900/15 px-3 text-xs font-black text-amber-900 transition hover:bg-amber-900/25"
+            label="Share"
+          />
+          <span className="rounded-full bg-amber-900/15 px-3 py-1 text-xs font-black text-amber-900">
+            Rank #1
+          </span>
+        </div>
       </div>
 
       <div className="p-6">
