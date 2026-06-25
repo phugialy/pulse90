@@ -151,26 +151,22 @@ function GroupsView({ groups }: { groups: Group[] }) {
   );
 }
 
-// ─── Knockout match card ──────────────────────────────────────────────────────
+// ─── Knockout match card (shared: R32 + bracket) ─────────────────────────────
 
-function KnockoutSlotFilled({
-  seed,
-  isHome,
-}: {
-  seed: KnockoutSeed;
-  isHome: boolean;
-}) {
+function KnockoutSlot({ seed }: { seed: KnockoutSeed }) {
   if (!seed.team) {
     return (
       <div
-        className={`flex min-h-[52px] items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${
+        className={`flex min-h-[44px] items-center justify-between gap-3 rounded-xl border px-3 py-2.5 ${
           seed.isThirdPlaceSlot
-            ? "border-emerald-400/30 bg-emerald-400/6"
-            : "border-[#10131a]/8 bg-white/60"
+            ? "border-emerald-400/25 bg-emerald-400/8"
+            : "border-white/8 bg-white/5"
         }`}
       >
-        <span className="text-sm font-black text-[#10131a]/42">{seed.label}</span>
-        <span className={`h-2 w-2 shrink-0 rounded-full ${seed.isThirdPlaceSlot ? "bg-emerald-400" : "bg-[#10131a]/15"}`} />
+        <span className={`text-xs font-black ${seed.isThirdPlaceSlot ? "text-emerald-300/70" : "text-white/38"}`}>
+          {seed.label}
+        </span>
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${seed.isThirdPlaceSlot ? "bg-emerald-400/50" : "bg-white/15"}`} />
       </div>
     );
   }
@@ -178,15 +174,14 @@ function KnockoutSlotFilled({
   return (
     <Link
       href={`/teams/${seed.team.slug}`}
-      className="flex min-h-[52px] items-center justify-between gap-3 rounded-2xl border border-[#f7d149] bg-[#f7d149] px-4 py-3 shadow-[0_0_18px_rgba(247,209,73,0.2)] transition hover:brightness-105"
+      className="flex min-h-[44px] items-center justify-between gap-2.5 rounded-xl border border-[#f7d149] bg-[#f7d149]/15 px-3 py-2.5 shadow-[0_0_14px_rgba(247,209,73,0.15)] transition hover:bg-[#f7d149]/25"
     >
       <span className="flex min-w-0 items-center gap-2">
         <FlagMark alt={`${seed.team.name} flag`} fallback={seed.team.flagEmoji} src={seed.team.flagAssetUrl} />
-        <span className="truncate text-sm font-black text-[#10131a]">{seed.team.name}</span>
-        <span className="text-xs font-bold text-[#10131a]/55">{seed.team.fifaCode}</span>
+        <span className="truncate text-xs font-black text-[#f7d149]">{seed.team.name}</span>
       </span>
-      <span className="shrink-0 text-sm font-black tabular-nums text-[#10131a]">
-        {seed.team.points} pts
+      <span className="shrink-0 text-[10px] font-black tabular-nums text-[#f7d149]/70">
+        {seed.team.points}pt
       </span>
     </Link>
   );
@@ -195,28 +190,28 @@ function KnockoutSlotFilled({
 function R32MatchCard({ slot }: { slot: R32Slot }) {
   const bothKnown = slot.home.team && slot.away.team;
   return (
-    <article className="flex flex-col gap-2 rounded-[22px] border border-[#10131a]/8 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#10131a]/35">
+    <article className={`flex flex-col gap-1.5 rounded-[20px] border p-3.5 ${
+      bothKnown
+        ? "border-[#f7d149]/20 bg-[#f7d149]/5 shadow-[0_0_20px_rgba(247,209,73,0.08)]"
+        : "border-white/8 bg-white/4"
+    }`}>
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/35">
           Round of 32
         </span>
-        <span
-          className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
-            bothKnown
-              ? "bg-lime text-[#10131a]"
-              : "bg-[#10131a]/5 text-[#10131a]/40"
-          }`}
-        >
+        <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${
+          bothKnown ? "bg-[#f7d149]/20 text-[#f7d149]" : "bg-white/8 text-white/35"
+        }`}>
           M{slot.matchNumber}
         </span>
       </div>
-      <KnockoutSlotFilled seed={slot.home} isHome={true} />
-      <div className="flex items-center gap-3 px-1">
-        <div className="h-px flex-1 bg-[#10131a]/8" />
-        <span className="text-[10px] font-black text-[#10131a]/28">VS</span>
-        <div className="h-px flex-1 bg-[#10131a]/8" />
+      <KnockoutSlot seed={slot.home} />
+      <div className="flex items-center gap-2 px-1">
+        <div className="h-px flex-1 bg-white/8" />
+        <span className="text-[9px] font-black text-white/20">VS</span>
+        <div className="h-px flex-1 bg-white/8" />
       </div>
-      <KnockoutSlotFilled seed={slot.away} isHome={false} />
+      <KnockoutSlot seed={slot.away} />
     </article>
   );
 }
@@ -226,21 +221,32 @@ function R32MatchCard({ slot }: { slot: R32Slot }) {
 function Round32View({ slots }: { slots: R32Slot[] }) {
   const resolved = slots.filter((s) => s.home.team || s.away.team).length;
   return (
-    <div>
-      <div className="mb-5 flex items-center justify-between gap-4">
+    <div className="overflow-hidden rounded-[28px] bg-[#10131a] shadow-[0_0_0_1px_rgba(247,209,73,0.12),0_24px_60px_rgba(16,19,26,0.45)]">
+      {/* Header */}
+      <div
+        className="flex flex-wrap items-center justify-between gap-4 px-6 py-5"
+        style={{ background: "linear-gradient(135deg, #1a2e50 0%, #10131a 100%)" }}
+      >
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-[#10131a]/40">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#f7d149]">
             FIFA World Cup 2026
           </p>
-          <p className="mt-0.5 text-lg font-black text-[#10131a]">
-            Round of 32 — 16 matches
+          <h2 className="mt-1 text-2xl font-black text-white">Round of 32</h2>
+          <p className="mt-0.5 text-sm font-bold text-white/35">
+            16 matches · seeds auto-fill from group results
           </p>
         </div>
-        <span className="shrink-0 rounded-full bg-[#10131a]/5 px-3 py-1.5 text-xs font-black text-[#10131a]/55">
+        <span className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black ${
+          resolved === 16
+            ? "border-[#f7d149]/40 bg-[#f7d149]/10 text-[#f7d149]"
+            : "border-white/12 bg-white/5 text-white/45"
+        }`}>
           {resolved} / 16 seeds locked
         </span>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+
+      {/* Grid */}
+      <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {slots.map((slot) => (
           <R32MatchCard key={slot.matchNumber} slot={slot} />
         ))}
