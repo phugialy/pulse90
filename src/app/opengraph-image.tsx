@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { getSupabaseReadClient } from "@/lib/pulse90-data";
+import { getSupabaseReadClient } from "@/lib/supabase/server";
 
 export const alt = "Pulse90 — World Cup 2026 Live Scores & Match Tracker";
 export const size = { width: 1200, height: 630 };
