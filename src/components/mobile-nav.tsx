@@ -10,7 +10,7 @@ import { navItems } from "@/components/nav-links";
 const navIcons = {
   Fixtures: CalendarDays,
   "Golden Boot": Trophy,
-  Groups: Shield,
+  Standings: Shield,
   Predictions: Sparkles,
   Teams: Users,
   "Watch Desk": Home,
