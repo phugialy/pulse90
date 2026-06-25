@@ -43,16 +43,24 @@ export type R32Slot = {
   away: KnockoutSeed;
 };
 
-const top16: { matchNumber: number; home: string; away: string }[] = [
-  { matchNumber: 89, home: "Winner M74", away: "Winner M77" },
-  { matchNumber: 90, home: "Winner M73", away: "Winner M75" },
-  { matchNumber: 91, home: "Winner M76", away: "Winner M78" },
-  { matchNumber: 92, home: "Winner M79", away: "Winner M80" },
-  { matchNumber: 93, home: "Winner M83", away: "Winner M84" },
-  { matchNumber: 94, home: "Winner M81", away: "Winner M82" },
-  { matchNumber: 95, home: "Winner M86", away: "Winner M88" },
-  { matchNumber: 96, home: "Winner M85", away: "Winner M87" },
-];
+const knockoutMatches: Record<number, { stage: "R16" | "QF" | "SF" | "3P" | "F"; home: string; away: string }> = {
+  89:  { stage: "R16", home: "Winner M74", away: "Winner M77" },
+  90:  { stage: "R16", home: "Winner M73", away: "Winner M75" },
+  91:  { stage: "R16", home: "Winner M76", away: "Winner M78" },
+  92:  { stage: "R16", home: "Winner M79", away: "Winner M80" },
+  93:  { stage: "R16", home: "Winner M83", away: "Winner M84" },
+  94:  { stage: "R16", home: "Winner M81", away: "Winner M82" },
+  95:  { stage: "R16", home: "Winner M86", away: "Winner M88" },
+  96:  { stage: "R16", home: "Winner M85", away: "Winner M87" },
+  97:  { stage: "QF",  home: "Winner M89", away: "Winner M90" },
+  98:  { stage: "QF",  home: "Winner M93", away: "Winner M94" },
+  99:  { stage: "QF",  home: "Winner M91", away: "Winner M92" },
+  100: { stage: "QF",  home: "Winner M95", away: "Winner M96" },
+  101: { stage: "SF",  home: "Winner M97", away: "Winner M98" },
+  102: { stage: "SF",  home: "Winner M99", away: "Winner M100" },
+  103: { stage: "3P",  home: "Runner-up M101", away: "Runner-up M102" },
+  104: { stage: "F",   home: "Winner M101", away: "Winner M102" },
+};
 
 const TABS = ["Groups", "Round of 32", "Top 16"] as const;
 type Tab = (typeof TABS)[number];
@@ -241,52 +249,161 @@ function Round32View({ slots }: { slots: R32Slot[] }) {
   );
 }
 
-// ─── Top 16 view ──────────────────────────────────────────────────────────────
+// ─── Top 16 bracket ───────────────────────────────────────────────────────────
 
-function Top16MatchCard({ match }: { match: (typeof top16)[number] }) {
+const stageColors = {
+  R16: { card: "border-white/10 bg-white/5",       label: "text-white/40",        dot: "bg-white/20" },
+  QF:  { card: "border-sky-400/25 bg-sky-400/8",   label: "text-sky-300",         dot: "bg-sky-400/50" },
+  SF:  { card: "border-amber-400/30 bg-amber-400/10", label: "text-amber-300",    dot: "bg-amber-400/60" },
+  "3P":{ card: "border-emerald-400/25 bg-emerald-400/8", label: "text-emerald-300", dot: "bg-emerald-400/50" },
+  F:   { card: "border-[#f7d149] bg-[#f7d149]/15 shadow-[0_0_28px_rgba(247,209,73,0.18)]", label: "text-[#f7d149]", dot: "bg-[#f7d149]" },
+};
+
+function BracketCard({ matchNumber }: { matchNumber: number }) {
+  const m = knockoutMatches[matchNumber];
+  if (!m) return null;
+  const colors = stageColors[m.stage];
+  const stageTag = m.stage === "F" ? "Final" : m.stage === "3P" ? "3rd Place" : m.stage === "SF" ? "Semi-final" : m.stage === "QF" ? "Quarter-final" : "Round of 16";
+
   return (
-    <article className="flex flex-col gap-2 rounded-[22px] border border-[#10131a]/8 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#10131a]/35">
-          Round of 16
+    <article className={`rounded-2xl border p-3 ${colors.card}`}>
+      <div className="mb-2.5 flex items-center justify-between gap-2">
+        <span className={`text-[9px] font-black uppercase tracking-[0.2em] ${colors.label}`}>
+          {stageTag}
         </span>
-        <span className="rounded-full bg-[#10131a]/5 px-2.5 py-1 text-[10px] font-black text-[#10131a]/40">
-          M{match.matchNumber}
+        <span className="rounded-full bg-white/8 px-2 py-0.5 text-[9px] font-black text-white/40">
+          M{matchNumber}
         </span>
       </div>
-      {[match.home, match.away].map((label, i) => (
+      {[m.home, m.away].map((label, i) => (
         <div
           key={i}
-          className="flex min-h-[52px] items-center gap-3 rounded-2xl border border-[#10131a]/8 bg-[#f8faf4]/80 px-4 py-3"
+          className="mt-1 flex min-h-[36px] items-center gap-2 rounded-xl border border-white/8 bg-white/5 px-2.5 py-2"
         >
-          <span className="h-2 w-2 shrink-0 rounded-full bg-[#10131a]/15" />
-          <span className="text-sm font-black text-[#10131a]/45">{label}</span>
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${colors.dot}`} />
+          <span className="truncate text-[11px] font-black text-white/55">{label}</span>
         </div>
       ))}
     </article>
   );
 }
 
+function BracketConnector({ side }: { side: "right" | "left" | "both" }) {
+  return (
+    <>
+      {side !== "left" && (
+        <span className="absolute right-0 top-1/2 hidden h-px w-3 translate-x-full bg-[#f7d149]/30 xl:block" />
+      )}
+      {side !== "right" && (
+        <span className="absolute left-0 top-1/2 hidden h-px w-3 -translate-x-full bg-[#f7d149]/30 xl:block" />
+      )}
+    </>
+  );
+}
+
+function BracketColumn({ label, color, children, spread = false }: {
+  label: string; color: string; children: React.ReactNode; spread?: boolean;
+}) {
+  return (
+    <div className={`grid gap-3 ${spread ? "content-around" : ""}`}>
+      <p className={`text-center text-[9px] font-black uppercase tracking-[0.2em] ${color}`}>
+        {label}
+      </p>
+      {children}
+    </div>
+  );
+}
+
 function Top16View() {
   return (
-    <div>
-      <div className="mb-5 flex items-center justify-between gap-4">
+    <div className="overflow-hidden rounded-[28px] bg-[#10131a] shadow-[0_0_0_1px_rgba(247,209,73,0.12),0_24px_60px_rgba(16,19,26,0.45)]">
+      {/* Header */}
+      <div
+        className="flex flex-wrap items-center justify-between gap-4 px-6 py-5"
+        style={{ background: "linear-gradient(135deg, #1a2e50 0%, #10131a 100%)" }}
+      >
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-[#10131a]/40">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#f7d149]">
             FIFA World Cup 2026
           </p>
-          <p className="mt-0.5 text-lg font-black text-[#10131a]">
-            Round of 16 — 8 matches
+          <h2 className="mt-1 text-2xl font-black text-white">Knockout Bracket</h2>
+          <p className="mt-0.5 text-sm font-bold text-white/35">
+            Round of 16 · Quarter-finals · Semi-finals · Final
           </p>
         </div>
-        <span className="shrink-0 rounded-full bg-[#10131a]/5 px-3 py-1.5 text-xs font-black text-[#10131a]/55">
-          Awaiting R32 results
-        </span>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { label: "R16", color: "text-white/50 border-white/15 bg-white/5" },
+            { label: "QF",  color: "text-sky-300 border-sky-400/25 bg-sky-400/10" },
+            { label: "SF",  color: "text-amber-300 border-amber-400/25 bg-amber-400/10" },
+            { label: "Final", color: "text-[#f7d149] border-[#f7d149]/40 bg-[#f7d149]/10" },
+          ].map(({ label, color }) => (
+            <span key={label} className={`rounded-full border px-3 py-1 text-[10px] font-black ${color}`}>
+              {label}
+            </span>
+          ))}
+        </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {top16.map((match) => (
-          <Top16MatchCard key={match.matchNumber} match={match} />
-        ))}
+
+      {/* Bracket */}
+      <div className="overflow-x-auto p-4 pb-6">
+        <div className="grid min-w-[820px] grid-cols-[1.1fr_1fr_1fr_1fr_1.1fr] gap-3">
+
+          {/* R16 left */}
+          <BracketColumn label="Round of 16" color="text-white/35">
+            {[89, 90, 93, 94].map((n) => (
+              <div key={n} className="relative">
+                <BracketConnector side="right" />
+                <BracketCard matchNumber={n} />
+              </div>
+            ))}
+          </BracketColumn>
+
+          {/* QF left */}
+          <BracketColumn label="Quarter-final" color="text-sky-400/70" spread>
+            {[97, 98].map((n) => (
+              <div key={n} className="relative">
+                <BracketConnector side="both" />
+                <BracketCard matchNumber={n} />
+              </div>
+            ))}
+          </BracketColumn>
+
+          {/* Centre: SF + Final + 3rd */}
+          <BracketColumn label="Semi-final / Final" color="text-amber-400/70" spread>
+            <div className="relative">
+              <BracketConnector side="both" />
+              <BracketCard matchNumber={101} />
+            </div>
+            <BracketCard matchNumber={104} />
+            <BracketCard matchNumber={103} />
+            <div className="relative">
+              <BracketConnector side="both" />
+              <BracketCard matchNumber={102} />
+            </div>
+          </BracketColumn>
+
+          {/* QF right */}
+          <BracketColumn label="Quarter-final" color="text-sky-400/70" spread>
+            {[99, 100].map((n) => (
+              <div key={n} className="relative">
+                <BracketConnector side="both" />
+                <BracketCard matchNumber={n} />
+              </div>
+            ))}
+          </BracketColumn>
+
+          {/* R16 right */}
+          <BracketColumn label="Round of 16" color="text-white/35">
+            {[91, 92, 95, 96].map((n) => (
+              <div key={n} className="relative">
+                <BracketConnector side="left" />
+                <BracketCard matchNumber={n} />
+              </div>
+            ))}
+          </BracketColumn>
+
+        </div>
       </div>
     </div>
   );
