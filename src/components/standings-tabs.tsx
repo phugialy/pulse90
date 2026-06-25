@@ -282,60 +282,34 @@ function EliminationBoard({ groups }: { groups: Group[] }) {
 
   if (eliminated.length === 0 && atRisk.length === 0) return null;
 
+  const rows = [
+    { teams: eliminated, label: "Eliminated", accent: "text-red-400", chip: "border-red-500/20 bg-red-500/8 text-red-300 hover:bg-red-500/15" },
+    { teams: atRisk,    label: "At Risk",    accent: "text-amber-400", chip: "border-amber-500/20 bg-amber-500/8 text-amber-200 hover:bg-amber-500/15" },
+  ].filter((r) => r.teams.length > 0);
+
   return (
     <div className="mt-4 overflow-hidden rounded-[24px] bg-[#10131a] shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_12px_40px_rgba(16,19,26,0.35)]">
-      <div
-        className="px-5 py-4"
-        style={{ background: "linear-gradient(135deg, #1a1020 0%, #10131a 100%)" }}
-      >
-        <p className="text-[9px] font-black uppercase tracking-[0.24em] text-white/35">Group Stage</p>
-        <h3 className="mt-0.5 text-base font-black text-white">Elimination Tracker</h3>
-      </div>
-
-      <div className={`grid gap-4 p-4 ${eliminated.length > 0 && atRisk.length > 0 ? "sm:grid-cols-2" : ""}`}>
-        {eliminated.length > 0 && (
-          <div>
-            <p className="mb-2.5 text-[9px] font-black uppercase tracking-[0.2em] text-red-400/80">
-              Eliminated · {eliminated.length} team{eliminated.length !== 1 ? "s" : ""}
+      <div className="divide-y divide-white/6">
+        {rows.map(({ teams, label, accent, chip }) => (
+          <div key={label} className="px-4 py-3">
+            <p className={`mb-2.5 text-[9px] font-black uppercase tracking-[0.22em] ${accent}`}>
+              {label} · {teams.length}
             </p>
-            <div className="grid gap-1.5">
-              {eliminated.map((team) => (
+            <div className="flex flex-wrap gap-2">
+              {teams.map((team) => (
                 <Link
                   href={`/teams/${team.slug}`}
                   key={team.slug}
-                  className="flex items-center gap-2.5 rounded-xl border border-red-500/15 bg-red-500/6 px-3 py-2.5 transition hover:bg-red-500/12"
+                  className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 transition ${chip}`}
                 >
                   <FlagMark alt={team.name} fallback={team.flagEmoji} src={team.flagAssetUrl} />
-                  <span className="flex-1 truncate text-xs font-black text-white/70">{team.name}</span>
-                  <span className="shrink-0 text-[10px] font-black text-white/28">Grp {team.groupCode}</span>
-                  <span className="shrink-0 tabular-nums text-[10px] font-black text-red-400/70">{team.points}pt</span>
+                  <span className="text-xs font-black">{team.name}</span>
+                  <span className="text-[10px] font-bold opacity-50">G{team.groupCode}</span>
                 </Link>
               ))}
             </div>
           </div>
-        )}
-
-        {atRisk.length > 0 && (
-          <div>
-            <p className="mb-2.5 text-[9px] font-black uppercase tracking-[0.2em] text-amber-400/80">
-              At Risk · {atRisk.length} team{atRisk.length !== 1 ? "s" : ""}
-            </p>
-            <div className="grid gap-1.5">
-              {atRisk.map((team) => (
-                <Link
-                  href={`/teams/${team.slug}`}
-                  key={team.slug}
-                  className="flex items-center gap-2.5 rounded-xl border border-amber-500/15 bg-amber-500/6 px-3 py-2.5 transition hover:bg-amber-500/12"
-                >
-                  <FlagMark alt={team.name} fallback={team.flagEmoji} src={team.flagAssetUrl} />
-                  <span className="flex-1 truncate text-xs font-black text-white/70">{team.name}</span>
-                  <span className="shrink-0 text-[10px] font-black text-white/28">Grp {team.groupCode}</span>
-                  <span className="shrink-0 tabular-nums text-[10px] font-black text-amber-400/70">{team.points}pt</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
+        ))}
       </div>
     </div>
   );
