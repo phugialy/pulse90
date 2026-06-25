@@ -16,6 +16,7 @@ type GroupTeam = {
   goalDifference: number;
   points: number;
   rank: number | null;
+  qualificationStatus: string;
 };
 
 type Group = {
@@ -33,6 +34,7 @@ export type KnockoutSeed = {
     flagAssetUrl: string | null;
     played: number;
     points: number;
+    qualificationStatus: string;
   } | null;
   isThirdPlaceSlot: boolean;
 };
@@ -171,16 +173,54 @@ function KnockoutSlot({ seed }: { seed: KnockoutSeed }) {
     );
   }
 
+  const isLocked = seed.team.qualificationStatus === "advancing" && seed.team.played >= 3;
+  const isLeading = seed.team.qualificationStatus === "advancing" && seed.team.played < 3;
+
+  if (isLocked) {
+    return (
+      <Link
+        href={`/teams/${seed.team.slug}`}
+        className="flex min-h-[44px] items-center justify-between gap-2.5 rounded-xl border border-[#f7d149] bg-[#f7d149]/15 px-3 py-2.5 shadow-[0_0_14px_rgba(247,209,73,0.15)] transition hover:bg-[#f7d149]/25"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <FlagMark alt={`${seed.team.name} flag`} fallback={seed.team.flagEmoji} src={seed.team.flagAssetUrl} />
+          <span className="truncate text-xs font-black text-[#f7d149]">{seed.team.name}</span>
+        </span>
+        <span className="shrink-0 rounded-full bg-[#f7d149]/20 px-1.5 py-0.5 text-[9px] font-black tracking-wide text-[#f7d149]">
+          LOCKED
+        </span>
+      </Link>
+    );
+  }
+
+  if (isLeading) {
+    return (
+      <Link
+        href={`/teams/${seed.team.slug}`}
+        className="flex min-h-[44px] items-center justify-between gap-2.5 rounded-xl border border-sky-400/35 bg-sky-400/8 px-3 py-2.5 transition hover:bg-sky-400/15"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <FlagMark alt={`${seed.team.name} flag`} fallback={seed.team.flagEmoji} src={seed.team.flagAssetUrl} />
+          <span className="truncate text-xs font-black text-sky-300">{seed.team.name}</span>
+        </span>
+        <span className="shrink-0 text-[10px] font-black tabular-nums text-sky-400/70">
+          {seed.team.points}pt
+        </span>
+      </Link>
+    );
+  }
+
+  // Fallback — team known but status unclear
   return (
     <Link
       href={`/teams/${seed.team.slug}`}
-      className="flex min-h-[44px] items-center justify-between gap-2.5 rounded-xl border border-[#f7d149] bg-[#f7d149]/15 px-3 py-2.5 shadow-[0_0_14px_rgba(247,209,73,0.15)] transition hover:bg-[#f7d149]/25"
+      className="flex min-h-[44px] items-center justify-between gap-2.5 rounded-xl border border-white/12 bg-white/5 px-3 py-2.5 transition hover:bg-white/10"
     >
       <span className="flex min-w-0 items-center gap-2">
         <FlagMark alt={`${seed.team.name} flag`} fallback={seed.team.flagEmoji} src={seed.team.flagAssetUrl} />
-        <span className="truncate text-xs font-black text-[#f7d149]">{seed.team.name}</span>
+        <span className="truncate text-xs font-black text-white/70">{seed.team.name}</span>
       </span>
-      <span className="shrink-0 text-[10px] font-black tabular-nums text-[#f7d149]/70">
+      <span className="shrink-0 text-[10px] font-black tabular-nums text-white/38">
         {seed.team.points}pt
       </span>
     </Link>
@@ -188,19 +228,25 @@ function KnockoutSlot({ seed }: { seed: KnockoutSeed }) {
 }
 
 function R32MatchCard({ slot }: { slot: R32Slot }) {
-  const bothKnown = slot.home.team && slot.away.team;
+  const bothLocked =
+    slot.home.team?.qualificationStatus === "advancing" && slot.home.team.played >= 3 &&
+    slot.away.team?.qualificationStatus === "advancing" && slot.away.team.played >= 3;
+  const anyKnown = slot.home.team || slot.away.team;
+
   return (
     <article className={`flex flex-col gap-1.5 rounded-[20px] border p-3.5 ${
-      bothKnown
-        ? "border-[#f7d149]/20 bg-[#f7d149]/5 shadow-[0_0_20px_rgba(247,209,73,0.08)]"
-        : "border-white/8 bg-white/4"
+      bothLocked
+        ? "border-[#f7d149]/25 bg-[#f7d149]/5 shadow-[0_0_20px_rgba(247,209,73,0.10)]"
+        : anyKnown
+          ? "border-sky-400/20 bg-sky-400/4"
+          : "border-white/8 bg-white/4"
     }`}>
       <div className="mb-1 flex items-center justify-between">
         <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/35">
           Round of 32
         </span>
         <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${
-          bothKnown ? "bg-[#f7d149]/20 text-[#f7d149]" : "bg-white/8 text-white/35"
+          bothLocked ? "bg-[#f7d149]/20 text-[#f7d149]" : anyKnown ? "bg-sky-400/15 text-sky-300" : "bg-white/8 text-white/35"
         }`}>
           M{slot.matchNumber}
         </span>
@@ -216,41 +262,137 @@ function R32MatchCard({ slot }: { slot: R32Slot }) {
   );
 }
 
+// ─── Elimination tracker ──────────────────────────────────────────────────────
+
+function EliminationBoard({ groups }: { groups: Group[] }) {
+  type TeamEntry = GroupTeam & { groupCode: string };
+  const eliminated: TeamEntry[] = [];
+  const atRisk: TeamEntry[] = [];
+
+  for (const group of groups) {
+    for (const team of group.teams) {
+      if (team.qualificationStatus !== "in_danger" || team.played === 0) continue;
+      if (team.played >= 3) {
+        eliminated.push({ ...team, groupCode: group.groupCode });
+      } else {
+        atRisk.push({ ...team, groupCode: group.groupCode });
+      }
+    }
+  }
+
+  if (eliminated.length === 0 && atRisk.length === 0) return null;
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-[24px] bg-[#10131a] shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_12px_40px_rgba(16,19,26,0.35)]">
+      <div
+        className="px-5 py-4"
+        style={{ background: "linear-gradient(135deg, #1a1020 0%, #10131a 100%)" }}
+      >
+        <p className="text-[9px] font-black uppercase tracking-[0.24em] text-white/35">Group Stage</p>
+        <h3 className="mt-0.5 text-base font-black text-white">Elimination Tracker</h3>
+      </div>
+
+      <div className={`grid gap-4 p-4 ${eliminated.length > 0 && atRisk.length > 0 ? "sm:grid-cols-2" : ""}`}>
+        {eliminated.length > 0 && (
+          <div>
+            <p className="mb-2.5 text-[9px] font-black uppercase tracking-[0.2em] text-red-400/80">
+              Eliminated · {eliminated.length} team{eliminated.length !== 1 ? "s" : ""}
+            </p>
+            <div className="grid gap-1.5">
+              {eliminated.map((team) => (
+                <Link
+                  href={`/teams/${team.slug}`}
+                  key={team.slug}
+                  className="flex items-center gap-2.5 rounded-xl border border-red-500/15 bg-red-500/6 px-3 py-2.5 transition hover:bg-red-500/12"
+                >
+                  <FlagMark alt={team.name} fallback={team.flagEmoji} src={team.flagAssetUrl} />
+                  <span className="flex-1 truncate text-xs font-black text-white/70">{team.name}</span>
+                  <span className="shrink-0 text-[10px] font-black text-white/28">Grp {team.groupCode}</span>
+                  <span className="shrink-0 tabular-nums text-[10px] font-black text-red-400/70">{team.points}pt</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {atRisk.length > 0 && (
+          <div>
+            <p className="mb-2.5 text-[9px] font-black uppercase tracking-[0.2em] text-amber-400/80">
+              At Risk · {atRisk.length} team{atRisk.length !== 1 ? "s" : ""}
+            </p>
+            <div className="grid gap-1.5">
+              {atRisk.map((team) => (
+                <Link
+                  href={`/teams/${team.slug}`}
+                  key={team.slug}
+                  className="flex items-center gap-2.5 rounded-xl border border-amber-500/15 bg-amber-500/6 px-3 py-2.5 transition hover:bg-amber-500/12"
+                >
+                  <FlagMark alt={team.name} fallback={team.flagEmoji} src={team.flagAssetUrl} />
+                  <span className="flex-1 truncate text-xs font-black text-white/70">{team.name}</span>
+                  <span className="shrink-0 text-[10px] font-black text-white/28">Grp {team.groupCode}</span>
+                  <span className="shrink-0 tabular-nums text-[10px] font-black text-amber-400/70">{team.points}pt</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Round of 32 view ─────────────────────────────────────────────────────────
 
-function Round32View({ slots }: { slots: R32Slot[] }) {
-  const resolved = slots.filter((s) => s.home.team || s.away.team).length;
+function Round32View({ slots, groups }: { slots: R32Slot[]; groups: Group[] }) {
+  const locked = slots.filter(
+    (s) =>
+      s.home.team?.qualificationStatus === "advancing" && s.home.team.played >= 3 &&
+      s.away.team?.qualificationStatus === "advancing" && s.away.team.played >= 3,
+  ).length;
+  const seeded = slots.filter((s) => s.home.team || s.away.team).length;
+
   return (
-    <div className="overflow-hidden rounded-[28px] bg-[#10131a] shadow-[0_0_0_1px_rgba(247,209,73,0.12),0_24px_60px_rgba(16,19,26,0.45)]">
-      {/* Header */}
-      <div
-        className="flex flex-wrap items-center justify-between gap-4 px-6 py-5"
-        style={{ background: "linear-gradient(135deg, #1a2e50 0%, #10131a 100%)" }}
-      >
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#f7d149]">
-            FIFA World Cup 2026
-          </p>
-          <h2 className="mt-1 text-2xl font-black text-white">Round of 32</h2>
-          <p className="mt-0.5 text-sm font-bold text-white/35">
-            16 matches · seeds auto-fill from group results
-          </p>
+    <div>
+      <div className="overflow-hidden rounded-[28px] bg-[#10131a] shadow-[0_0_0_1px_rgba(247,209,73,0.12),0_24px_60px_rgba(16,19,26,0.45)]">
+        {/* Header */}
+        <div
+          className="flex flex-wrap items-center justify-between gap-4 px-6 py-5"
+          style={{ background: "linear-gradient(135deg, #1a2e50 0%, #10131a 100%)" }}
+        >
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#f7d149]">
+              FIFA World Cup 2026
+            </p>
+            <h2 className="mt-1 text-2xl font-black text-white">Round of 32</h2>
+            <p className="mt-0.5 text-sm font-bold text-white/35">
+              16 matches · seeds auto-fill from group results
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1.5">
+            <span className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black ${
+              locked === 16
+                ? "border-[#f7d149]/40 bg-[#f7d149]/10 text-[#f7d149]"
+                : "border-white/12 bg-white/5 text-white/45"
+            }`}>
+              {locked} / 16 matches confirmed
+            </span>
+            {seeded > locked && (
+              <span className="rounded-full border border-sky-400/25 bg-sky-400/8 px-3 py-1 text-[10px] font-black text-sky-300">
+                {seeded - locked} match{seeded - locked !== 1 ? "es" : ""} with leading teams
+              </span>
+            )}
+          </div>
         </div>
-        <span className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black ${
-          resolved === 16
-            ? "border-[#f7d149]/40 bg-[#f7d149]/10 text-[#f7d149]"
-            : "border-white/12 bg-white/5 text-white/45"
-        }`}>
-          {resolved} / 16 seeds locked
-        </span>
+
+        {/* Grid */}
+        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {slots.map((slot) => (
+            <R32MatchCard key={slot.matchNumber} slot={slot} />
+          ))}
+        </div>
       </div>
 
-      {/* Grid */}
-      <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {slots.map((slot) => (
-          <R32MatchCard key={slot.matchNumber} slot={slot} />
-        ))}
-      </div>
+      <EliminationBoard groups={groups} />
     </div>
   );
 }
@@ -440,7 +582,7 @@ export function StandingsTabs({ groups, roundOf32Slots }: {
 
       {/* Content */}
       {tab === "Groups" && <GroupsView groups={groups} />}
-      {tab === "Round of 32" && <Round32View slots={roundOf32Slots} />}
+      {tab === "Round of 32" && <Round32View slots={roundOf32Slots} groups={groups} />}
       {tab === "Top 16" && <Top16View />}
     </div>
   );

@@ -41,6 +41,7 @@ type GroupBoard = {
     points: number;
     rank: number | null;
     slug: string;
+    qualificationStatus: string;
   }>;
 };
 
@@ -57,7 +58,18 @@ function buildSeed(slotLabel: string, groups: Map<string, GroupBoard>): Knockout
 
   return {
     label: slotLabel,
-    team: team && team.played > 0 ? team : null,
+    team: team && team.played > 0
+      ? {
+          slug: team.slug,
+          name: team.name,
+          fifaCode: team.fifaCode,
+          flagEmoji: team.flagEmoji,
+          flagAssetUrl: team.flagAssetUrl,
+          played: team.played,
+          points: team.points,
+          qualificationStatus: team.qualificationStatus,
+        }
+      : null,
     isThirdPlaceSlot: false,
   };
 }
