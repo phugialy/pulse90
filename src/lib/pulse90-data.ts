@@ -741,8 +741,25 @@ export async function getTodayDashboard() {
     return fallbackToday();
   }
 
+  const now = new Date();
   const rawRows = fixturesResult.data as FixtureCardRow[];
-  const allMapped = rawRows.map((row) => mapFixture(row, teamFlags));
+
+  // Client-side status correction: if a match has started and has scores but
+  // the DB still shows "scheduled" (ESPN status mapping edge case), treat as live
+  // so the hero card renders in live mode without waiting for the next cron run.
+  const inferredRows = rawRows.map((row): FixtureCardRow => {
+    if (
+      row.status === "scheduled" &&
+      new Date(row.starts_at).getTime() < now.getTime() &&
+      row.home_score !== null &&
+      row.away_score !== null
+    ) {
+      return { ...row, status: "live" };
+    }
+    return row;
+  });
+
+  const allMapped = inferredRows.map((row) => mapFixture(row, teamFlags));
 
   const results = (completedResult.data ?? []).map((row) =>
     mapFixture(row as FixtureCardRow, teamFlags),
@@ -777,7 +794,6 @@ export async function getTodayDashboard() {
   );
 
   // Next upcoming match for countdown clock
-  const now = new Date();
   const nextRow = rawRows.find(
     (r) => r.status === "scheduled" && new Date(r.starts_at) > now,
   );

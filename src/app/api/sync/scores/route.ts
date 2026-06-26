@@ -173,15 +173,14 @@ function toOurStatus(
 ): "scheduled" | "live" | "completed" | "postponed" | "cancelled" {
   if (espn.type.completed) return "completed";
   const n = espn.type.name;
-  if (
-    n === "STATUS_IN_PROGRESS" ||
-    n === "STATUS_HALFTIME" ||
-    n === "STATUS_END_PERIOD"
-  )
-    return "live";
   if (n === "STATUS_POSTPONED") return "postponed";
   if (n === "STATUS_CANCELED") return "cancelled";
-  return "scheduled";
+  // Treat any non-scheduled status as live — ESPN may return unexpected
+  // in-progress type names (STATUS_SECOND_HALF, STATUS_EXTRA_TIME, etc.)
+  // that we haven't explicitly listed. Defaulting to "scheduled" caused
+  // the DB to store scores with wrong status.
+  if (n === "STATUS_SCHEDULED") return "scheduled";
+  return "live";
 }
 
 function parseMinute(clock: string, period: number): number | null {
