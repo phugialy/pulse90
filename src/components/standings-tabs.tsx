@@ -266,85 +266,87 @@ function R32MatchCard({ slot }: { slot: R32Slot }) {
 
 function EliminationBoard({ groups }: { groups: Group[] }) {
   type TeamEntry = GroupTeam & { groupCode: string };
+  const thirdPlace: TeamEntry[] = [];
   const eliminated: TeamEntry[] = [];
-  const atRisk: TeamEntry[] = [];
-  const thirdWatch: TeamEntry[] = [];
 
   for (const group of groups) {
     for (const team of group.teams) {
       if (team.played === 0) continue;
-      if (team.qualificationStatus === "in_danger") {
-        if (team.played >= 3) eliminated.push({ ...team, groupCode: group.groupCode });
-        else atRisk.push({ ...team, groupCode: group.groupCode });
-      } else if (team.qualificationStatus === "third_place_watch") {
-        thirdWatch.push({ ...team, groupCode: group.groupCode });
+      if (team.qualificationStatus === "third_place_watch") {
+        thirdPlace.push({ ...team, groupCode: group.groupCode });
+      } else if (team.qualificationStatus === "in_danger" && team.played >= 3) {
+        eliminated.push({ ...team, groupCode: group.groupCode });
       }
     }
   }
 
-  if (eliminated.length === 0 && atRisk.length === 0 && thirdWatch.length === 0) return null;
+  if (thirdPlace.length === 0 && eliminated.length === 0) return null;
 
-  // Sort third-place watch by points desc so best candidate is first
-  thirdWatch.sort((a, b) => b.points - a.points || b.goalDifference - a.goalDifference);
-
-  const rows = [
-    {
-      teams: thirdWatch,
-      label: "3rd Place Watch",
-      sublabel: "Best 8 of these advance",
-      accent: "text-sky-400",
-      chip: "border-sky-500/20 bg-sky-500/8 text-sky-200 hover:bg-sky-500/15",
-      showPoints: true,
-    },
-    {
-      teams: atRisk,
-      label: "At Risk",
-      sublabel: undefined,
-      accent: "text-amber-400",
-      chip: "border-amber-500/20 bg-amber-500/8 text-amber-200 hover:bg-amber-500/15",
-      showPoints: false,
-    },
-    {
-      teams: eliminated,
-      label: "Eliminated",
-      sublabel: undefined,
-      accent: "text-red-400",
-      chip: "border-red-500/20 bg-red-500/8 text-red-300 hover:bg-red-500/15",
-      showPoints: false,
-    },
-  ].filter((r) => r.teams.length > 0);
+  // Rank by points → GD; top 8 are currently on track to advance
+  thirdPlace.sort((a, b) => b.points - a.points || b.goalDifference - a.goalDifference);
+  const cutoff = 8;
 
   return (
     <div className="mt-4 overflow-hidden rounded-[24px] bg-[#10131a] shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_12px_40px_rgba(16,19,26,0.35)]">
       <div className="divide-y divide-white/6">
-        {rows.map(({ teams, label, sublabel, accent, chip, showPoints }) => (
-          <div key={label} className="px-4 py-3">
+
+        {/* 3rd place race — 8 spots up for grabs */}
+        {thirdPlace.length > 0 && (
+          <div className="px-4 py-3">
             <div className="mb-2.5 flex items-baseline gap-2">
-              <p className={`text-[9px] font-black uppercase tracking-[0.22em] ${accent}`}>
-                {label} · {teams.length}
+              <p className="text-[9px] font-black uppercase tracking-[0.22em] text-sky-400">
+                3rd Place Race · {thirdPlace.length} teams
               </p>
-              {sublabel && (
-                <span className="text-[9px] font-bold text-white/28">{sublabel}</span>
-              )}
+              <span className="text-[9px] font-bold text-white/28">8 spots · live ranking</span>
             </div>
             <div className="flex flex-wrap gap-2">
-              {teams.map((team) => (
+              {thirdPlace.map((team, i) => {
+                const advancing = i < cutoff;
+                return (
+                  <Link
+                    href={`/teams/${team.slug}`}
+                    key={team.slug}
+                    className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 transition ${
+                      advancing
+                        ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300 hover:bg-emerald-400/18"
+                        : "border-amber-500/20 bg-amber-500/8 text-amber-200 hover:bg-amber-500/15"
+                    }`}
+                  >
+                    <span className={`text-[9px] font-black tabular-nums ${advancing ? "text-emerald-400/60" : "text-amber-400/50"}`}>
+                      #{i + 1}
+                    </span>
+                    <FlagMark alt={team.name} fallback={team.flagEmoji} src={team.flagAssetUrl} />
+                    <span className="text-xs font-black">{team.name}</span>
+                    <span className="text-[10px] font-bold opacity-55">{team.points}pt</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Eliminated */}
+        {eliminated.length > 0 && (
+          <div className="px-4 py-3">
+            <p className="mb-2.5 text-[9px] font-black uppercase tracking-[0.22em] text-red-400">
+              Eliminated · {eliminated.length}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {eliminated.map((team) => (
                 <Link
                   href={`/teams/${team.slug}`}
                   key={team.slug}
-                  className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 transition ${chip}`}
+                  className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/8 px-2.5 py-1.5 text-red-300 transition hover:bg-red-500/15"
                 >
                   <FlagMark alt={team.name} fallback={team.flagEmoji} src={team.flagAssetUrl} />
                   <span className="text-xs font-black">{team.name}</span>
-                  {showPoints
-                    ? <span className="text-[10px] font-bold opacity-60">{team.points}pt</span>
-                    : <span className="text-[10px] font-bold opacity-50">G{team.groupCode}</span>
-                  }
+                  <span className="text-[10px] font-bold opacity-50">G{team.groupCode}</span>
                 </Link>
               ))}
             </div>
           </div>
-        ))}
+        )}
+
       </div>
     </div>
   );
