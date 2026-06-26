@@ -268,33 +268,65 @@ function EliminationBoard({ groups }: { groups: Group[] }) {
   type TeamEntry = GroupTeam & { groupCode: string };
   const eliminated: TeamEntry[] = [];
   const atRisk: TeamEntry[] = [];
+  const thirdWatch: TeamEntry[] = [];
 
   for (const group of groups) {
     for (const team of group.teams) {
-      if (team.qualificationStatus !== "in_danger" || team.played === 0) continue;
-      if (team.played >= 3) {
-        eliminated.push({ ...team, groupCode: group.groupCode });
-      } else {
-        atRisk.push({ ...team, groupCode: group.groupCode });
+      if (team.played === 0) continue;
+      if (team.qualificationStatus === "in_danger") {
+        if (team.played >= 3) eliminated.push({ ...team, groupCode: group.groupCode });
+        else atRisk.push({ ...team, groupCode: group.groupCode });
+      } else if (team.qualificationStatus === "third_place_watch") {
+        thirdWatch.push({ ...team, groupCode: group.groupCode });
       }
     }
   }
 
-  if (eliminated.length === 0 && atRisk.length === 0) return null;
+  if (eliminated.length === 0 && atRisk.length === 0 && thirdWatch.length === 0) return null;
+
+  // Sort third-place watch by points desc so best candidate is first
+  thirdWatch.sort((a, b) => b.points - a.points || b.goalDifference - a.goalDifference);
 
   const rows = [
-    { teams: eliminated, label: "Eliminated", accent: "text-red-400", chip: "border-red-500/20 bg-red-500/8 text-red-300 hover:bg-red-500/15" },
-    { teams: atRisk,    label: "At Risk",    accent: "text-amber-400", chip: "border-amber-500/20 bg-amber-500/8 text-amber-200 hover:bg-amber-500/15" },
+    {
+      teams: thirdWatch,
+      label: "3rd Place Watch",
+      sublabel: "Best 8 of these advance",
+      accent: "text-sky-400",
+      chip: "border-sky-500/20 bg-sky-500/8 text-sky-200 hover:bg-sky-500/15",
+      showPoints: true,
+    },
+    {
+      teams: atRisk,
+      label: "At Risk",
+      sublabel: undefined,
+      accent: "text-amber-400",
+      chip: "border-amber-500/20 bg-amber-500/8 text-amber-200 hover:bg-amber-500/15",
+      showPoints: false,
+    },
+    {
+      teams: eliminated,
+      label: "Eliminated",
+      sublabel: undefined,
+      accent: "text-red-400",
+      chip: "border-red-500/20 bg-red-500/8 text-red-300 hover:bg-red-500/15",
+      showPoints: false,
+    },
   ].filter((r) => r.teams.length > 0);
 
   return (
     <div className="mt-4 overflow-hidden rounded-[24px] bg-[#10131a] shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_12px_40px_rgba(16,19,26,0.35)]">
       <div className="divide-y divide-white/6">
-        {rows.map(({ teams, label, accent, chip }) => (
+        {rows.map(({ teams, label, sublabel, accent, chip, showPoints }) => (
           <div key={label} className="px-4 py-3">
-            <p className={`mb-2.5 text-[9px] font-black uppercase tracking-[0.22em] ${accent}`}>
-              {label} · {teams.length}
-            </p>
+            <div className="mb-2.5 flex items-baseline gap-2">
+              <p className={`text-[9px] font-black uppercase tracking-[0.22em] ${accent}`}>
+                {label} · {teams.length}
+              </p>
+              {sublabel && (
+                <span className="text-[9px] font-bold text-white/28">{sublabel}</span>
+              )}
+            </div>
             <div className="flex flex-wrap gap-2">
               {teams.map((team) => (
                 <Link
@@ -304,7 +336,10 @@ function EliminationBoard({ groups }: { groups: Group[] }) {
                 >
                   <FlagMark alt={team.name} fallback={team.flagEmoji} src={team.flagAssetUrl} />
                   <span className="text-xs font-black">{team.name}</span>
-                  <span className="text-[10px] font-bold opacity-50">G{team.groupCode}</span>
+                  {showPoints
+                    ? <span className="text-[10px] font-bold opacity-60">{team.points}pt</span>
+                    : <span className="text-[10px] font-bold opacity-50">G{team.groupCode}</span>
+                  }
                 </Link>
               ))}
             </div>
