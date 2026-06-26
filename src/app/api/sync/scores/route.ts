@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
+import { seedKnockoutFixtures } from "@/lib/seed-knockout-fixtures";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -684,6 +685,15 @@ export async function GET(request: NextRequest) {
   }
 
   // ------------------------------------------------------------------
+  // Seed knockout fixtures when any match just completed
+  // ------------------------------------------------------------------
+  const anyCompleted = updated.some((u) => u.status === "completed");
+  let seedResult: { created: number; skipped: number; errors: string[] } | null = null;
+  if (anyCompleted) {
+    seedResult = await seedKnockoutFixtures();
+  }
+
+  // ------------------------------------------------------------------
   // Log the run
   // ------------------------------------------------------------------
   await writeJobRun(supabase, {
@@ -699,6 +709,7 @@ export async function GET(request: NextRequest) {
       fixtures: updated,
       eventsBackfilled,
       lineupsUpserted,
+      knockoutFixturesSeeded: seedResult?.created ?? 0,
     },
   });
 
@@ -709,6 +720,7 @@ export async function GET(request: NextRequest) {
     updated,
     eventsBackfilled,
     lineupsUpserted,
+    knockoutFixturesSeeded: seedResult?.created ?? 0,
     durationMs: Date.now() - startedAt,
   });
 }
