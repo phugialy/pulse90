@@ -163,8 +163,10 @@ function assignThirdPlaceTeams(
 type SeedResult = { created: number; skipped: number; errors: string[] };
 
 export async function seedKnockoutFixtures(): Promise<SeedResult> {
-  const supabase = getSupabaseAdminClient();
-  if (!supabase) return { created: 0, skipped: 0, errors: ["No admin client"] };
+  const _supabase = getSupabaseAdminClient();
+  if (!_supabase) return { created: 0, skipped: 0, errors: ["No admin client"] };
+  // Alias so TypeScript treats it as non-null in nested async closures
+  const supabase = _supabase;
 
   const result: SeedResult = { created: 0, skipped: 0, errors: [] };
 
