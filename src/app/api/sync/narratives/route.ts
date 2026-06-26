@@ -4,8 +4,10 @@ import { getSupabaseAdminClient } from "@/lib/supabase/server";
 
 // ---------------------------------------------------------------------------
 // Narrative cron
-// Generates importance_reason + stakes copy for upcoming fixtures via Claude.
-// Runs daily at 6am UTC. Can also be forced for a specific match:
+// Generates importance_reason, stakes, and implication copy for fixtures.
+// Runs every 4h. Force-refreshes fixtures within 72h of kickoff so copy
+// stays current as standings change game-by-game.
+// Can also be forced for a specific match:
 //   GET /api/sync/narratives?matchNumber=1&secret=CRON_SECRET
 // ---------------------------------------------------------------------------
 
@@ -36,15 +38,18 @@ export async function GET(request: NextRequest) {
   const specificMatch = request.nextUrl.searchParams.get("matchNumber");
   const forceRefresh = request.nextUrl.searchParams.get("force") === "1";
 
-  // Find target fixtures
   const now = new Date();
-  const cutoff = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  // Window: up to 14 days out so newly seeded knockout fixtures get copy fast
+  const cutoff = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+  // Fixtures within 72h are force-refreshed even if they already have copy,
+  // because standings have changed since the copy was first generated.
+  const urgentCutoff = new Date(now.getTime() + 72 * 60 * 60 * 1000);
 
   let query = supabase
     .from("fixtures")
     .select(`
       id, match_number, starts_at, stage, group_code, status,
-      stakes, importance_reason,
+      stakes, importance_reason, implication,
       home_team_id, away_team_id
     `)
     .eq("status", "scheduled")
@@ -57,7 +62,7 @@ export async function GET(request: NextRequest) {
       .from("fixtures")
       .select(`
         id, match_number, starts_at, stage, group_code, status,
-        stakes, importance_reason,
+        stakes, importance_reason, implication,
         home_team_id, away_team_id
       `)
       .eq("match_number", parseInt(specificMatch, 10))
@@ -69,15 +74,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ status: "skipped", reason: "No target fixtures found" });
   }
 
-  // Only process fixtures with missing copy unless force=1
+  // Targets:
+  // - Always: fixtures missing any of the three copy fields
+  // - Always: fixtures within 72h (force-refresh with current standings)
+  // - With force=1: everything in the window
   const targets = forceRefresh
     ? fixtures
-    : fixtures.filter((f) => !f.stakes || !f.importance_reason);
+    : fixtures.filter((f) => {
+        const isUrgent = new Date(f.starts_at) <= urgentCutoff;
+        const missingCopy = !f.stakes || !f.importance_reason || !f.implication;
+        return missingCopy || isUrgent;
+      });
 
   if (!targets.length) {
     return NextResponse.json({
       status: "skipped",
-      reason: "All fixtures already have copy. Use ?force=1 to regenerate.",
+      reason: "No fixtures need copy refresh. Use ?force=1 to regenerate all.",
     });
   }
 
@@ -93,7 +105,7 @@ export async function GET(request: NextRequest) {
     (teamsData ?? []).map((t: TeamRow) => [t.id, t]),
   );
 
-  // Fetch group standings for context
+  // Fetch live group standings for context (reflects actual played results)
   const groupCodes = [...new Set(targets.map((f) => f.group_code).filter(Boolean))];
   const { data: standingsData } = await supabase
     .from("group_standings")
@@ -118,7 +130,7 @@ export async function GET(request: NextRequest) {
     .eq("status", "completed")
     .or(teamIds.map((id) => `home_team_id.eq.${id},away_team_id.eq.${id}`).join(","))
     .order("starts_at", { ascending: false })
-    .limit(40);
+    .limit(80);
 
   type ResultRow = {
     home_team_id: string; away_team_id: string;
@@ -165,7 +177,7 @@ export async function GET(request: NextRequest) {
             return `${t?.name ?? s.team_id}: P${s.played} W${s.won} D${s.drawn} L${s.lost} GD${s.goal_difference} Pts${s.points}`;
           })
           .join("\n")
-      : "Group standings not yet available (likely match 1 of the group)";
+      : "Knockout stage match — winner advances";
 
     const homeForm = recentForm(fixture.home_team_id);
     const awayForm = recentForm(fixture.away_team_id);
@@ -175,6 +187,7 @@ export async function GET(request: NextRequest) {
       weekday: "short", month: "short", day: "numeric",
     });
     const stage = groupCode ? `Group ${groupCode}` : fixture.stage;
+    const isKnockout = !groupCode;
 
     const prompt = `You are a football copywriter for Pulse90, a World Cup 2026 watch desk. Write punchy, human match copy that makes someone who wasn't planning to watch clear their schedule.
 
@@ -183,33 +196,37 @@ MATCH CONTEXT:
 - ${stage}, Match #${fixture.match_number}, ${kickoff}
 - ${home.name} recent WC form: ${homeForm}
 - ${away.name} recent WC form: ${awayForm}
-- Current group standings:
-${standingsText}
+- ${isKnockout ? "Knockout stage: loser goes home, winner advances" : `Current group standings:\n${standingsText}`}
 
-Write two pieces of copy. Return ONLY valid JSON — no markdown, no explanation:
+Write three pieces of copy. Return ONLY valid JSON — no markdown, no explanation:
 
 {
-  "importance_reason": "One gripping sentence (max 15 words). This appears in a 'Why it matters' card. Lead with the tension, not the teams. Make it visceral.",
-  "stakes": "Two punchy sentences (max 30 words total). This is a fixture note visible before kick-off. Tell viewers exactly what's at stake for each side and why they can't look away."
+  "importance_reason": "One gripping sentence (max 15 words). Lead with the tension, not the teams.",
+  "stakes": "Two punchy sentences (max 30 words total). Specific: points positions, qualification scenarios, revenge angles, history.",
+  "implication": "One sentence (max 20 words). What does the RESULT mean for each team's tournament path? Be specific about what happens next for winner and loser."
 }
 
 Rules:
-- No clichés like 'must-win', 'crucial', 'important', 'clash'
-- Name both teams at least once across the two fields
-- Stakes are specific: points positions, qualification scenarios, revenge angles, history
-- If it's the group opener for both teams, say so — first impressions define tournament momentum`;
+- No clichés: no 'must-win', 'crucial', 'important', 'clash', 'showdown'
+- Name both teams at least once across all three fields
+- Use actual form (${homeForm} / ${awayForm}) to color the copy — mention momentum, confidence, or vulnerability
+- ${isKnockout ? "For knockout: loser is eliminated, say what the winner earns (which QF slot etc.)" : "For group stage: mention the exact points/standing implications"}`;
 
     try {
       const response = await anthropic.messages.create({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 300,
+        max_tokens: 400,
         messages: [{ role: "user", content: prompt }],
       });
 
       const raw = response.content[0].type === "text" ? response.content[0].text.trim() : "";
-      const parsed = JSON.parse(raw) as { importance_reason?: string; stakes?: string };
+      const parsed = JSON.parse(raw) as {
+        importance_reason?: string;
+        stakes?: string;
+        implication?: string;
+      };
 
-      if (!parsed.importance_reason || !parsed.stakes) {
+      if (!parsed.importance_reason || !parsed.stakes || !parsed.implication) {
         console.error("narratives: bad JSON for match", fixture.match_number, raw);
         skipped.push(fixture.match_number);
         continue;
@@ -220,6 +237,7 @@ Rules:
         .update({
           importance_reason: parsed.importance_reason,
           stakes: parsed.stakes,
+          implication: parsed.implication,
           updated_at: now.toISOString(),
         })
         .eq("id", fixture.id);
@@ -228,7 +246,6 @@ Rules:
         console.error("narratives: DB update failed", fixture.match_number, updateErr.message);
         skipped.push(fixture.match_number);
       } else {
-        console.log("narratives: updated match", fixture.match_number, home.name, "vs", away.name);
         processed.push(fixture.match_number);
       }
     } catch (err) {
