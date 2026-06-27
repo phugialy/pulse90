@@ -64,7 +64,7 @@ const knockoutMatches: Record<number, { stage: "R16" | "QF" | "SF" | "3P" | "F";
   104: { stage: "F",   home: "Winner M101", away: "Winner M102" },
 };
 
-const TABS = ["Groups", "Round of 32", "Top 16"] as const;
+const TABS = ["Round of 32", "Top 16", "Groups"] as const;
 type Tab = (typeof TABS)[number];
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -574,7 +574,7 @@ export function StandingsTabs({ groups, roundOf32Slots }: {
   groups: Group[];
   roundOf32Slots: R32Slot[];
 }) {
-  const [tab, setTab] = useState<Tab>("Groups");
+  const [tab, setTab] = useState<Tab>("Round of 32");
 
   return (
     <div className="space-y-6">

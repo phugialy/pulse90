@@ -205,22 +205,21 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
     return null;
   }
 
-  // ── Load group standings ──────────────────────────────────────────────────
+  // ── Load group standings (live view, updated by DB trigger on each fixture change) ──
   const { data: standingsRows } = await supabase
-    .from("standings")
-    .select("team_id, group_code, rank, played, points, goal_difference, goals_for, qualification_status")
-    .eq("tournament_id", TOURNAMENT_ID);
+    .from("live_group_projection_view")
+    .select("team_id, group_code, projected_rank, played, points, goal_difference, goals_for");
 
-  type StandingRow = { team_id: string; group_code: string; rank: number | null; played: number; points: number; goal_difference: number; goals_for: number; qualification_status: string };
+  type StandingRow = { team_id: string; group_code: string; projected_rank: number; played: number; points: number; goal_difference: number; goals_for: number };
   const standings = (standingsRows ?? []) as StandingRow[];
 
   // Build lookup: group → rank → teamId (only if group is complete)
   const groupRankMap = new Map<string, Map<number, string>>();
   const groupPlayedMap = new Map<string, number>(); // group → total played across 4 teams
   for (const s of standings) {
-    if (!s.group_code || !s.rank) continue;
+    if (!s.group_code || !s.projected_rank) continue;
     if (!groupRankMap.has(s.group_code)) groupRankMap.set(s.group_code, new Map());
-    groupRankMap.get(s.group_code)!.set(s.rank, s.team_id);
+    groupRankMap.get(s.group_code)!.set(s.projected_rank, s.team_id);
     groupPlayedMap.set(s.group_code, (groupPlayedMap.get(s.group_code) ?? 0) + s.played);
   }
 
@@ -233,7 +232,7 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
 
   if (allGroupsDone) {
     const thirdTeams: ThirdTeam[] = standings
-      .filter((s) => s.rank === 3)
+      .filter((s) => s.projected_rank === 3)
       .map((s) => ({
         teamId: s.team_id,
         points: s.points,
