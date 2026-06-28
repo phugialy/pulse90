@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { AppShell } from "@/components/app-shell";
 import { StandingsTabs, type R32Slot, type KnockoutSeed } from "@/components/standings-tabs";
-import { getGroupsBoard } from "@/lib/pulse90-data";
+import { getGroupsBoard, getR32Fixtures } from "@/lib/pulse90-data";
 
 export const metadata: Metadata = {
   title: "Standings",
@@ -75,14 +75,26 @@ function buildSeed(slotLabel: string, groups: Map<string, GroupBoard>): Knockout
 }
 
 export default async function GroupsPage() {
-  const { groups } = await getGroupsBoard();
+  const [{ groups }, r32Fixtures] = await Promise.all([
+    getGroupsBoard(),
+    getR32Fixtures(),
+  ]);
 
   const groupMap = new Map(groups.map((g) => [g.groupCode, g]));
-  const roundOf32Slots: R32Slot[] = roundOf32Matchups.map((m) => ({
-    matchNumber: m.matchNumber,
-    home: buildSeed(m.home, groupMap),
-    away: buildSeed(m.away, groupMap),
-  }));
+  const roundOf32Slots: R32Slot[] = roundOf32Matchups.map((m) => {
+    const fixture = r32Fixtures.get(m.matchNumber);
+    return {
+      matchNumber: m.matchNumber,
+      home: buildSeed(m.home, groupMap),
+      away: buildSeed(m.away, groupMap),
+      startsAt: fixture?.startsAt,
+      venue: fixture?.venue,
+      hostCity: fixture?.hostCity,
+      status: fixture?.status,
+      homeScore: fixture?.homeScore,
+      awayScore: fixture?.awayScore,
+    };
+  });
 
   return (
     <AppShell>

@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { useState } from "react";
 import Link from "next/link";
+import { Clock3, MapPin } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,12 @@ export type R32Slot = {
   matchNumber: number;
   home: KnockoutSeed;
   away: KnockoutSeed;
+  startsAt?: string;
+  venue?: string | null;
+  hostCity?: string | null;
+  status?: string;
+  homeScore?: number | null;
+  awayScore?: number | null;
 };
 
 const knockoutMatches: Record<number, { stage: "R16" | "QF" | "SF" | "3P" | "F"; home: string; away: string }> = {
@@ -227,11 +234,23 @@ function KnockoutSlot({ seed }: { seed: KnockoutSeed }) {
   );
 }
 
+function formatR32Date(isoStr: string): string {
+  const d = new Date(isoStr);
+  return (
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
+    " · " +
+    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+  );
+}
+
 function R32MatchCard({ slot }: { slot: R32Slot }) {
   const bothLocked =
     slot.home.team?.qualificationStatus === "advancing" && slot.home.team.played >= 3 &&
     slot.away.team?.qualificationStatus === "advancing" && slot.away.team.played >= 3;
   const anyKnown = slot.home.team || slot.away.team;
+  const isLive = slot.status === "live";
+  const isCompleted = slot.status === "completed";
+  const hasScore = slot.homeScore != null && slot.awayScore != null;
 
   return (
     <article className={`flex flex-col gap-1.5 rounded-[20px] border p-3.5 ${
@@ -253,11 +272,49 @@ function R32MatchCard({ slot }: { slot: R32Slot }) {
       </div>
       <KnockoutSlot seed={slot.home} />
       <div className="flex items-center gap-2 px-1">
-        <div className="h-px flex-1 bg-white/8" />
-        <span className="text-[9px] font-black text-white/20">VS</span>
-        <div className="h-px flex-1 bg-white/8" />
+        {isLive && hasScore ? (
+          <>
+            <div className="h-px flex-1 bg-red-500/20" />
+            <span className="text-sm font-black text-white">
+              {slot.homeScore} – {slot.awayScore}
+            </span>
+            <span className="animate-pulse text-[9px] font-black uppercase tracking-wide text-red-400">
+              LIVE
+            </span>
+            <div className="h-px flex-1 bg-red-500/20" />
+          </>
+        ) : isCompleted && hasScore ? (
+          <>
+            <div className="h-px flex-1 bg-white/8" />
+            <span className="text-sm font-black text-white/70">
+              {slot.homeScore} – {slot.awayScore}
+            </span>
+            <div className="h-px flex-1 bg-white/8" />
+          </>
+        ) : (
+          <>
+            <div className="h-px flex-1 bg-white/8" />
+            <span className="text-[9px] font-black text-white/20">VS</span>
+            <div className="h-px flex-1 bg-white/8" />
+          </>
+        )}
       </div>
       <KnockoutSlot seed={slot.away} />
+      {slot.startsAt && (
+        <div className="mt-1 flex items-center gap-1.5 overflow-hidden rounded-xl border border-white/6 bg-white/5 px-2.5 py-1.5">
+          <Clock3 className="size-3 shrink-0 text-white/30" />
+          <span className="text-[10px] font-bold text-white/40">
+            {formatR32Date(slot.startsAt)}
+          </span>
+          {slot.venue && (
+            <>
+              <span className="mx-0.5 text-white/15">·</span>
+              <MapPin className="size-3 shrink-0 text-white/30" />
+              <span className="truncate text-[10px] font-bold text-white/40">{slot.venue}</span>
+            </>
+          )}
+        </div>
+      )}
     </article>
   );
 }

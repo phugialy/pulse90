@@ -1899,3 +1899,48 @@ export async function getGroupsBoard() {
     })),
   };
 }
+
+// ── R32 fixture details ────────────────────────────────────────────────────────
+
+export type R32FixtureDetail = {
+  startsAt: string;
+  venue: string | null;
+  hostCity: string | null;
+  status: string;
+  homeScore: number | null;
+  awayScore: number | null;
+};
+
+export async function getR32Fixtures(): Promise<Map<number, R32FixtureDetail>> {
+  const supabase = getSupabaseReadClient();
+  if (!supabase) return new Map();
+
+  const { data } = await supabase
+    .from("fixture_cards_view")
+    .select("match_number, starts_at, venue, host_city, status, home_score, away_score")
+    .gte("match_number", 73)
+    .lte("match_number", 88);
+
+  type R32Row = {
+    match_number: number;
+    starts_at: string;
+    venue: string | null;
+    host_city: string | null;
+    status: string;
+    home_score: number | null;
+    away_score: number | null;
+  };
+
+  const map = new Map<number, R32FixtureDetail>();
+  for (const row of (data ?? []) as R32Row[]) {
+    map.set(row.match_number, {
+      startsAt: row.starts_at,
+      venue: row.venue,
+      hostCity: row.host_city,
+      status: row.status,
+      homeScore: row.home_score,
+      awayScore: row.away_score,
+    });
+  }
+  return map;
+}
