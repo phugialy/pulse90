@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import { seedKnockoutFixtures } from "@/lib/seed-knockout-fixtures";
 
+export const maxDuration = 300;
+
 export async function GET(request: NextRequest) {
   const startedAt = Date.now();
 

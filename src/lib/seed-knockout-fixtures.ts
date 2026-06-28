@@ -92,28 +92,49 @@ async function fetchEspnForDate(dateStr: string): Promise<EspnEvent[]> {
   } catch { return []; }
 }
 
-async function findEspnEvent(
-  homeSlug: string, awaySlug: string,
-  teamNames: Map<string, string>,   // id → name
-): Promise<{ startsAt: string } | null> {
-  // Scan knockout window: July 1–21 2026
-  const start = new Date("2026-07-01");
-  const end   = new Date("2026-07-21");
-
-  const homeName = teamNames.get(homeSlug)?.toLowerCase() ?? "";
-  const awayName = teamNames.get(awaySlug)?.toLowerCase() ?? "";
-
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const dateStr = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
-    const events = await fetchEspnForDate(dateStr);
+// Prefetch the entire knockout window (Jul 1–22) in parallel, build a lookup map.
+// Key: sorted normalized name pair joined by "|", value: startsAt ISO string.
+async function buildKnockoutSchedule(): Promise<Map<string, string>> {
+  const dateStrs: string[] = [];
+  for (let d = new Date("2026-07-01"); d <= new Date("2026-07-22"); d.setDate(d.getDate() + 1)) {
+    dateStrs.push(
+      `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`,
+    );
+  }
+  const allEvents = await Promise.all(dateStrs.map(fetchEspnForDate));
+  const schedule = new Map<string, string>();
+  for (const events of allEvents) {
     for (const evt of events) {
       const comp = evt.competitions[0];
       if (!comp) continue;
-      const names = comp.competitors.map((c) => c.team.displayName.toLowerCase());
-      if (names.some((n) => homeName && n.includes(homeName.split(" ")[0])) &&
-          names.some((n) => awayName && n.includes(awayName.split(" ")[0]))) {
-        return { startsAt: evt.date };
-      }
+      const names = comp.competitors.map((c) => c.team.displayName.toLowerCase()).sort();
+      const key = names.join("|");
+      if (!schedule.has(key)) schedule.set(key, evt.date);
+    }
+  }
+  return schedule;
+}
+
+function lookupEspnSchedule(
+  homeId: string, awayId: string,
+  teamNames: Map<string, string>,
+  schedule: Map<string, string>,
+): string | null {
+  const homeName = teamNames.get(homeId)?.toLowerCase() ?? "";
+  const awayName = teamNames.get(awayId)?.toLowerCase() ?? "";
+  if (!homeName || !awayName) return null;
+
+  // Exact sorted-name key
+  const key = [homeName, awayName].sort().join("|");
+  if (schedule.has(key)) return schedule.get(key)!;
+
+  // Partial match on first word (handles name discrepancies)
+  const homeFirst = homeName.split(" ")[0];
+  const awayFirst = awayName.split(" ")[0];
+  for (const [k, date] of schedule) {
+    const parts = k.split("|");
+    if (parts.some((p) => p.includes(homeFirst)) && parts.some((p) => p.includes(awayFirst))) {
+      return date;
     }
   }
   return null;
@@ -246,11 +267,11 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
     thirdAssignment = assignThirdPlaceTeams(thirdTeams, R32);
   }
 
-  // ── Load team names for ESPN matching ─────────────────────────────────────
-  const { data: teamRows } = await supabase
-    .from("teams")
-    .select("id, name")
-    .eq("tournament_id", TOURNAMENT_ID);
+  // ── Load team names + ESPN schedule in parallel ───────────────────────────
+  const [{ data: teamRows }, espnSchedule] = await Promise.all([
+    supabase.from("teams").select("id, name").eq("tournament_id", TOURNAMENT_ID),
+    buildKnockoutSchedule(),
+  ]);
 
   const teamNames = new Map<string, string>((teamRows ?? []).map((t: { id: string; name: string }) => [t.id, t.name]));
 
@@ -280,9 +301,7 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
     const homeName = teamNames.get(homeId) ?? "";
     const awayName = teamNames.get(awayId) ?? "";
 
-    const espn = await findEspnEvent(homeId, awayId, teamNames);
-
-    // Fallback approximate dates if ESPN doesn't know yet
+    // Fallback approximate dates if ESPN hasn't listed this match yet
     const APPROX: Record<string, string> = {
       round_of_32:   "2026-07-02T18:00:00Z",
       round_of_16:   "2026-07-07T18:00:00Z",
@@ -291,7 +310,8 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
       third_place:   "2026-07-19T15:00:00Z",
       final:         "2026-07-19T19:00:00Z",
     };
-    const startsAt = espn?.startsAt ?? APPROX[stage] ?? "2026-07-10T18:00:00Z";
+    const espnDate = lookupEspnSchedule(homeId, awayId, teamNames, espnSchedule);
+    const startsAt = espnDate ?? APPROX[stage] ?? "2026-07-10T18:00:00Z";
 
     const { error } = await supabase.from("fixtures").upsert(
       {
