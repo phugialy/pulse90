@@ -4,6 +4,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Clock3, MapPin } from "lucide-react";
+import { CircularBracket } from "./circular-bracket";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,26 +53,32 @@ export type R32Slot = {
   awayScore?: number | null;
 };
 
-const knockoutMatches: Record<number, { stage: "R16" | "QF" | "SF" | "3P" | "F"; home: string; away: string }> = {
-  89:  { stage: "R16", home: "Winner M74", away: "Winner M77" },
-  90:  { stage: "R16", home: "Winner M73", away: "Winner M75" },
-  91:  { stage: "R16", home: "Winner M76", away: "Winner M78" },
-  92:  { stage: "R16", home: "Winner M79", away: "Winner M80" },
-  93:  { stage: "R16", home: "Winner M83", away: "Winner M84" },
-  94:  { stage: "R16", home: "Winner M81", away: "Winner M82" },
-  95:  { stage: "R16", home: "Winner M86", away: "Winner M88" },
-  96:  { stage: "R16", home: "Winner M85", away: "Winner M87" },
-  97:  { stage: "QF",  home: "Winner M89", away: "Winner M90" },
-  98:  { stage: "QF",  home: "Winner M93", away: "Winner M94" },
-  99:  { stage: "QF",  home: "Winner M91", away: "Winner M92" },
-  100: { stage: "QF",  home: "Winner M95", away: "Winner M96" },
-  101: { stage: "SF",  home: "Winner M97", away: "Winner M98" },
-  102: { stage: "SF",  home: "Winner M99", away: "Winner M100" },
-  103: { stage: "3P",  home: "Runner-up M101", away: "Runner-up M102" },
-  104: { stage: "F",   home: "Winner M101", away: "Winner M102" },
+type KnockoutStage = "R16" | "QF" | "SF" | "3P" | "F";
+
+type KnockoutFixtureTeam = {
+  slug: string;
+  name: string;
+  fifaCode: string;
+  flagEmoji: string;
+  flagAssetUrl: string | null;
+} | null;
+
+export type KnockoutFixtureSlot = {
+  matchNumber: number;
+  stage: string;
+  startsAt?: string;
+  venue?: string | null;
+  hostCity?: string | null;
+  status?: string;
+  homeScore?: number | null;
+  awayScore?: number | null;
+  home: KnockoutFixtureTeam;
+  away: KnockoutFixtureTeam;
+  homePlaceholder: string | null;
+  awayPlaceholder: string | null;
 };
 
-const TABS = ["Round of 32", "Top 16", "Groups"] as const;
+const TABS = ["Round of 32", "Bracket", "Top 16", "Groups"] as const;
 type Tab = (typeof TABS)[number];
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -467,7 +474,7 @@ function Round32View({ slots, groups }: { slots: R32Slot[]; groups: Group[] }) {
 
 // ─── Top 16 bracket ───────────────────────────────────────────────────────────
 
-const stageColors = {
+const stageColors: Record<KnockoutStage, { card: string; label: string; dot: string }> = {
   R16: { card: "border-white/10 bg-white/5",       label: "text-white/40",        dot: "bg-white/20" },
   QF:  { card: "border-sky-400/25 bg-sky-400/8",   label: "text-sky-300",         dot: "bg-sky-400/50" },
   SF:  { card: "border-amber-400/30 bg-amber-400/10", label: "text-amber-300",    dot: "bg-amber-400/60" },
@@ -475,31 +482,94 @@ const stageColors = {
   F:   { card: "border-[#f7d149] bg-[#f7d149]/15 shadow-[0_0_28px_rgba(247,209,73,0.18)]", label: "text-[#f7d149]", dot: "bg-[#f7d149]" },
 };
 
-function BracketCard({ matchNumber }: { matchNumber: number }) {
-  const m = knockoutMatches[matchNumber];
-  if (!m) return null;
-  const colors = stageColors[m.stage];
-  const stageTag = m.stage === "F" ? "Final" : m.stage === "3P" ? "3rd Place" : m.stage === "SF" ? "Semi-final" : m.stage === "QF" ? "Quarter-final" : "Round of 16";
+function stageCode(stage?: string): KnockoutStage {
+  if (stage === "final") return "F";
+  if (stage === "third_place") return "3P";
+  if (stage === "semi_final") return "SF";
+  if (stage === "quarter_final") return "QF";
+  return "R16";
+}
+
+function stageLabel(stage: KnockoutStage) {
+  return stage === "F" ? "Final" : stage === "3P" ? "3rd Place" : stage === "SF" ? "Semi-final" : stage === "QF" ? "Quarter-final" : "Round of 16";
+}
+
+function KnockoutTeamLine({
+  colors,
+  placeholder,
+  team,
+}: {
+  colors: { dot: string };
+  placeholder: string | null;
+  team: KnockoutFixtureTeam;
+}) {
+  if (team) {
+    return (
+      <Link
+        href={`/teams/${team.slug}`}
+        className="mt-1 flex min-h-[36px] items-center gap-2 rounded-xl border border-white/8 bg-white/5 px-2.5 py-2 transition hover:bg-white/10"
+      >
+        <FlagMark alt={`${team.name} flag`} fallback={team.flagEmoji} src={team.flagAssetUrl} />
+        <span className="truncate text-[11px] font-black text-white/78">{team.name}</span>
+      </Link>
+    );
+  }
+
+  return (
+    <div className="mt-1 flex min-h-[36px] items-center gap-2 rounded-xl border border-white/8 bg-white/5 px-2.5 py-2">
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${colors.dot}`} />
+      <span className="truncate text-[11px] font-black text-white/38">{placeholder ?? "TBD"}</span>
+    </div>
+  );
+}
+
+function BracketCard({ fixture, matchNumber }: { fixture?: KnockoutFixtureSlot; matchNumber: number }) {
+  const stage = stageCode(fixture?.stage);
+  const colors = stageColors[stage];
+  const isLive = fixture?.status === "live";
+  const isCompleted = fixture?.status === "completed";
+  const hasScore = fixture?.homeScore != null && fixture?.awayScore != null;
 
   return (
     <article className={`rounded-2xl border p-3 ${colors.card}`}>
       <div className="mb-2.5 flex items-center justify-between gap-2">
         <span className={`text-[9px] font-black uppercase tracking-[0.2em] ${colors.label}`}>
-          {stageTag}
+          {stageLabel(stage)}
         </span>
-        <span className="rounded-full bg-white/8 px-2 py-0.5 text-[9px] font-black text-white/40">
-          M{matchNumber}
-        </span>
+        {isLive ? (
+          <span className="rounded-full bg-red-500 px-2 py-0.5 text-[9px] font-black text-white">Live</span>
+        ) : isCompleted ? (
+          <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-black text-white/45">FT</span>
+        ) : null}
       </div>
-      {[m.home, m.away].map((label, i) => (
-        <div
-          key={i}
-          className="mt-1 flex min-h-[36px] items-center gap-2 rounded-xl border border-white/8 bg-white/5 px-2.5 py-2"
-        >
-          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${colors.dot}`} />
-          <span className="truncate text-[11px] font-black text-white/55">{label}</span>
+      <KnockoutTeamLine colors={colors} placeholder={fixture?.homePlaceholder ?? null} team={fixture?.home ?? null} />
+      <div className="flex items-center gap-2 px-1 py-1">
+        <div className="h-px flex-1 bg-white/8" />
+        <span className={`text-[10px] font-black ${isLive ? "text-red-300" : "text-white/28"}`}>
+          {hasScore ? `${fixture.homeScore}-${fixture.awayScore}` : "vs"}
+        </span>
+        <div className="h-px flex-1 bg-white/8" />
+      </div>
+      <KnockoutTeamLine colors={colors} placeholder={fixture?.awayPlaceholder ?? null} team={fixture?.away ?? null} />
+      {fixture?.startsAt && (
+        <div className="mt-2 flex items-center gap-1.5 overflow-hidden rounded-xl border border-white/6 bg-white/5 px-2.5 py-1.5">
+          <Clock3 className="size-3 shrink-0 text-white/30" />
+          <span className="text-[10px] font-bold text-white/40">{formatR32Date(fixture.startsAt)}</span>
+          {fixture.hostCity && (
+            <>
+              <span className="mx-0.5 text-white/15">·</span>
+              <MapPin className="size-3 shrink-0 text-white/30" />
+              <span className="truncate text-[10px] font-bold text-white/40">{fixture.hostCity}</span>
+            </>
+          )}
         </div>
-      ))}
+      )}
+      <Link
+        href={`/matches/${matchNumber}`}
+        className="mt-2 inline-flex h-7 items-center rounded-full bg-white/8 px-3 text-[10px] font-black text-white/45 transition hover:bg-white/14 hover:text-white/75"
+      >
+        Open fixture
+      </Link>
     </article>
   );
 }
@@ -530,7 +600,9 @@ function BracketColumn({ label, color, children, spread = false }: {
   );
 }
 
-function Top16View() {
+function Top16View({ slots }: { slots: KnockoutFixtureSlot[] }) {
+  const fixtures = new Map(slots.map((slot) => [slot.matchNumber, slot]));
+
   return (
     <div className="overflow-hidden rounded-[28px] bg-[#10131a] shadow-[0_0_0_1px_rgba(247,209,73,0.12),0_24px_60px_rgba(16,19,26,0.45)]">
       {/* Header */}
@@ -570,7 +642,7 @@ function Top16View() {
             {[89, 90, 93, 94].map((n) => (
               <div key={n} className="relative">
                 <BracketConnector side="right" />
-                <BracketCard matchNumber={n} />
+                <BracketCard fixture={fixtures.get(n)} matchNumber={n} />
               </div>
             ))}
           </BracketColumn>
@@ -580,7 +652,7 @@ function Top16View() {
             {[97, 98].map((n) => (
               <div key={n} className="relative">
                 <BracketConnector side="both" />
-                <BracketCard matchNumber={n} />
+                <BracketCard fixture={fixtures.get(n)} matchNumber={n} />
               </div>
             ))}
           </BracketColumn>
@@ -589,13 +661,13 @@ function Top16View() {
           <BracketColumn label="Semi-final / Final" color="text-amber-400/70" spread>
             <div className="relative">
               <BracketConnector side="both" />
-              <BracketCard matchNumber={101} />
+              <BracketCard fixture={fixtures.get(101)} matchNumber={101} />
             </div>
-            <BracketCard matchNumber={104} />
-            <BracketCard matchNumber={103} />
+            <BracketCard fixture={fixtures.get(104)} matchNumber={104} />
+            <BracketCard fixture={fixtures.get(103)} matchNumber={103} />
             <div className="relative">
               <BracketConnector side="both" />
-              <BracketCard matchNumber={102} />
+              <BracketCard fixture={fixtures.get(102)} matchNumber={102} />
             </div>
           </BracketColumn>
 
@@ -604,7 +676,7 @@ function Top16View() {
             {[99, 100].map((n) => (
               <div key={n} className="relative">
                 <BracketConnector side="both" />
-                <BracketCard matchNumber={n} />
+                <BracketCard fixture={fixtures.get(n)} matchNumber={n} />
               </div>
             ))}
           </BracketColumn>
@@ -614,7 +686,7 @@ function Top16View() {
             {[91, 92, 95, 96].map((n) => (
               <div key={n} className="relative">
                 <BracketConnector side="left" />
-                <BracketCard matchNumber={n} />
+                <BracketCard fixture={fixtures.get(n)} matchNumber={n} />
               </div>
             ))}
           </BracketColumn>
@@ -627,8 +699,9 @@ function Top16View() {
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-export function StandingsTabs({ groups, roundOf32Slots }: {
+export function StandingsTabs({ groups, knockoutSlots, roundOf32Slots }: {
   groups: Group[];
+  knockoutSlots: KnockoutFixtureSlot[];
   roundOf32Slots: R32Slot[];
 }) {
   const [tab, setTab] = useState<Tab>("Round of 32");
@@ -651,7 +724,8 @@ export function StandingsTabs({ groups, roundOf32Slots }: {
       {/* Content */}
       {tab === "Groups" && <GroupsView groups={groups} />}
       {tab === "Round of 32" && <Round32View slots={roundOf32Slots} groups={groups} />}
-      {tab === "Top 16" && <Top16View />}
+      {tab === "Bracket" && <CircularBracket slots={roundOf32Slots} />}
+      {tab === "Top 16" && <Top16View slots={knockoutSlots} />}
     </div>
   );
 }
