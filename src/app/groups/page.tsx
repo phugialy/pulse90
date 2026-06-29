@@ -2,8 +2,8 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import { AppShell } from "@/components/app-shell";
-import { StandingsTabs, type R32Slot, type KnockoutSeed } from "@/components/standings-tabs";
-import { getGroupsBoard, getR32Fixtures } from "@/lib/pulse90-data";
+import { StandingsTabs, type R32Slot, type KnockoutFixtureSlot, type KnockoutSeed } from "@/components/standings-tabs";
+import { getGroupsBoard, getKnockoutFixtures } from "@/lib/pulse90-data";
 
 export const metadata: Metadata = {
   title: "Standings",
@@ -45,6 +45,14 @@ type GroupBoard = {
   }>;
 };
 
+type KnockoutFixtureTeam = {
+  slug: string;
+  name: string;
+  fifaCode: string;
+  flagEmoji: string;
+  flagAssetUrl: string | null;
+} | null;
+
 function buildSeed(slotLabel: string, groups: Map<string, GroupBoard>): KnockoutSeed {
   const seeded = slotLabel.match(/^([A-L])([12])$/);
 
@@ -74,19 +82,44 @@ function buildSeed(slotLabel: string, groups: Map<string, GroupBoard>): Knockout
   };
 }
 
+function buildFixtureSeed(
+  slotLabel: string,
+  fixtureTeam: KnockoutFixtureTeam,
+  groups: Map<string, GroupBoard>,
+): KnockoutSeed {
+  if (fixtureTeam) {
+    return {
+      label: slotLabel,
+      team: {
+        slug: fixtureTeam.slug,
+        name: fixtureTeam.name,
+        fifaCode: fixtureTeam.fifaCode,
+        flagEmoji: fixtureTeam.flagEmoji,
+        flagAssetUrl: fixtureTeam.flagAssetUrl,
+        played: 3,
+        points: 0,
+        qualificationStatus: "advancing",
+      },
+      isThirdPlaceSlot: slotLabel.includes("3rd"),
+    };
+  }
+
+  return buildSeed(slotLabel, groups);
+}
+
 export default async function GroupsPage() {
-  const [{ groups }, r32Fixtures] = await Promise.all([
+  const [{ groups }, knockoutFixtures] = await Promise.all([
     getGroupsBoard(),
-    getR32Fixtures(),
+    getKnockoutFixtures(),
   ]);
 
   const groupMap = new Map(groups.map((g) => [g.groupCode, g]));
   const roundOf32Slots: R32Slot[] = roundOf32Matchups.map((m) => {
-    const fixture = r32Fixtures.get(m.matchNumber);
+    const fixture = knockoutFixtures.get(m.matchNumber);
     return {
       matchNumber: m.matchNumber,
-      home: buildSeed(m.home, groupMap),
-      away: buildSeed(m.away, groupMap),
+      home: buildFixtureSeed(m.home, fixture?.home ?? null, groupMap),
+      away: buildFixtureSeed(m.away, fixture?.away ?? null, groupMap),
       startsAt: fixture?.startsAt,
       venue: fixture?.venue,
       hostCity: fixture?.hostCity,
@@ -95,11 +128,27 @@ export default async function GroupsPage() {
       awayScore: fixture?.awayScore,
     };
   });
+  const knockoutSlots: KnockoutFixtureSlot[] = Array.from(knockoutFixtures.values())
+    .filter((fixture) => fixture.matchNumber >= 89)
+    .map((fixture) => ({
+      matchNumber: fixture.matchNumber,
+      stage: fixture.stage,
+      startsAt: fixture.startsAt,
+      venue: fixture.venue,
+      hostCity: fixture.hostCity,
+      status: fixture.status,
+      homeScore: fixture.homeScore,
+      awayScore: fixture.awayScore,
+      home: fixture.home,
+      away: fixture.away,
+      homePlaceholder: fixture.homePlaceholder,
+      awayPlaceholder: fixture.awayPlaceholder,
+    }));
 
   return (
     <AppShell>
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <StandingsTabs groups={groups} roundOf32Slots={roundOf32Slots} />
+        <StandingsTabs groups={groups} knockoutSlots={knockoutSlots} roundOf32Slots={roundOf32Slots} />
       </div>
     </AppShell>
   );

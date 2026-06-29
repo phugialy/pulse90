@@ -78,6 +78,61 @@ const KNOCKOUT: FixtureSlot[] = [
   { matchNumber: 104, stage: "final",         home: { type: "winner",    match: 101 }, away: { type: "winner",    match: 102 } },
 ];
 
+const MANUAL_STARTS_AT: Record<number, string> = {
+  73: "2026-06-28T19:00:00Z",
+  76: "2026-06-29T19:00:00Z",
+  74: "2026-06-30T19:00:00Z",
+  75: "2026-06-30T23:00:00Z",
+  77: "2026-07-01T19:00:00Z",
+  78: "2026-07-01T23:00:00Z",
+  79: "2026-07-02T19:00:00Z",
+  80: "2026-07-02T23:00:00Z",
+  81: "2026-07-03T19:00:00Z",
+  82: "2026-07-03T23:00:00Z",
+  83: "2026-07-04T19:00:00Z",
+  84: "2026-07-04T23:00:00Z",
+  85: "2026-07-05T19:00:00Z",
+  86: "2026-07-05T23:00:00Z",
+  87: "2026-07-06T19:00:00Z",
+  88: "2026-07-06T23:00:00Z",
+  89: "2026-07-07T19:00:00Z",
+  90: "2026-07-07T23:00:00Z",
+  91: "2026-07-08T19:00:00Z",
+  92: "2026-07-08T23:00:00Z",
+  93: "2026-07-09T19:00:00Z",
+  94: "2026-07-09T23:00:00Z",
+  95: "2026-07-10T19:00:00Z",
+  96: "2026-07-10T23:00:00Z",
+  97: "2026-07-11T19:00:00Z",
+  98: "2026-07-11T23:00:00Z",
+  99: "2026-07-12T19:00:00Z",
+  100: "2026-07-12T23:00:00Z",
+  101: "2026-07-15T19:00:00Z",
+  102: "2026-07-16T19:00:00Z",
+  103: "2026-07-19T15:00:00Z",
+  104: "2026-07-19T19:00:00Z",
+};
+
+function slotPlaceholder(slot: Slot): string {
+  if (slot.type === "group") return `${slot.code}${slot.rank}`;
+  if (slot.type === "third") return `3rd ${slot.pool.join("/")}`;
+  if (slot.type === "winner") return `Winner M${slot.match}`;
+  return `Runner-up M${slot.match}`;
+}
+
+function stageLabel(stage: string): string {
+  const labels: Record<string, string> = {
+    final: "Final",
+    quarter_final: "Quarter Final",
+    round_of_16: "Best of 16",
+    round_of_32: "Best of 32",
+    semi_final: "Semi Final",
+    third_place: "Third Place",
+  };
+
+  return labels[stage] ?? stage.replace(/_/g, " ");
+}
+
 // ─── ESPN helpers ─────────────────────────────────────────────────────────────
 
 type EspnEvent = { id: string; date: string; competitions: Array<{ competitors: Array<{ homeAway: "home" | "away"; team: { id: string; displayName: string; abbreviation: string } }> }> };
@@ -198,7 +253,7 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
     .eq("tournament_id", TOURNAMENT_ID)
     .gte("match_number", 73);
 
-  const existing = new Map<number, { homeId: string; awayId: string; homeScore: number | null; awayScore: number | null; status: string }>();
+  const existing = new Map<number, { homeId: string | null; awayId: string | null; homeScore: number | null; awayScore: number | null; status: string }>();
   for (const row of existingRows ?? []) {
     existing.set(row.match_number, {
       homeId: row.home_team_id,
@@ -268,12 +323,22 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
   }
 
   // ── Load team names + ESPN schedule in parallel ───────────────────────────
-  const [{ data: teamRows }, espnSchedule] = await Promise.all([
+  const [{ data: teamRows }, { data: venueRows }, espnSchedule] = await Promise.all([
     supabase.from("teams").select("id, name").eq("tournament_id", TOURNAMENT_ID),
+    supabase.from("venues").select("id").eq("tournament_id", TOURNAMENT_ID).order("id", { ascending: true }),
     buildKnockoutSchedule(),
   ]);
 
   const teamNames = new Map<string, string>((teamRows ?? []).map((t: { id: string; name: string }) => [t.id, t.name]));
+  const venueIds = ((venueRows ?? []) as Array<{ id: string }>).map((venue) => venue.id);
+  if (venueIds.length === 0) {
+    result.errors.push("No venues found for tournament");
+    return result;
+  }
+
+  function venueForMatch(matchNumber: number) {
+    return venueIds[(matchNumber - 1) % venueIds.length];
+  }
 
   // ── Resolve a slot to a teamId ────────────────────────────────────────────
   function resolveSlot(slot: Slot): string | null {
@@ -295,11 +360,13 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
   async function insertFixture(
     matchNumber: number,
     stage: string,
-    homeId: string,
-    awayId: string,
+    homeId: string | null,
+    awayId: string | null,
+    homePlaceholder: string,
+    awayPlaceholder: string,
   ) {
-    const homeName = teamNames.get(homeId) ?? "";
-    const awayName = teamNames.get(awayId) ?? "";
+    const homeName = homeId ? (teamNames.get(homeId) ?? homePlaceholder) : homePlaceholder;
+    const awayName = awayId ? (teamNames.get(awayId) ?? awayPlaceholder) : awayPlaceholder;
 
     // Fallback approximate dates if ESPN hasn't listed this match yet
     const APPROX: Record<string, string> = {
@@ -310,8 +377,8 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
       third_place:   "2026-07-19T15:00:00Z",
       final:         "2026-07-19T19:00:00Z",
     };
-    const espnDate = lookupEspnSchedule(homeId, awayId, teamNames, espnSchedule);
-    const startsAt = espnDate ?? APPROX[stage] ?? "2026-07-10T18:00:00Z";
+    const espnDate = homeId && awayId ? lookupEspnSchedule(homeId, awayId, teamNames, espnSchedule) : null;
+    const startsAt = MANUAL_STARTS_AT[matchNumber] ?? espnDate ?? APPROX[stage] ?? "2026-07-10T18:00:00Z";
 
     const { error } = await supabase.from("fixtures").upsert(
       {
@@ -320,16 +387,19 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
         match_number: matchNumber,
         stage,
         group_code: null,
+        venue_id: venueForMatch(matchNumber),
         home_team_id: homeId,
         away_team_id: awayId,
+        home_placeholder: homePlaceholder,
+        away_placeholder: awayPlaceholder,
         starts_at: startsAt,
         status: "scheduled",
         importance_score: stage === "final" ? 99 : stage === "semi_final" ? 95 : stage === "quarter_final" ? 90 : stage === "round_of_16" ? 85 : 80,
-        importance_reason: `${homeName} vs ${awayName} — ${stage.replace(/_/g, " ")}`,
-        stakes: `${homeName} face ${awayName} in the ${stage.replace(/_/g, " ")}.`,
+        importance_reason: `${homeName} vs ${awayName} - ${stageLabel(stage)}`,
+        stakes: `${homeName} face ${awayName} in ${stageLabel(stage)}.`,
         implication: `Winner advances; loser exits the tournament.`,
       },
-      { onConflict: "id", ignoreDuplicates: true },
+      { onConflict: "id" },
     );
 
     if (error) {
@@ -341,7 +411,7 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
 
   // ── Process R32 ───────────────────────────────────────────────────────────
   for (const slot of R32) {
-    if (existing.has(slot.matchNumber)) { result.skipped++; continue; }
+    if (existing.get(slot.matchNumber)?.status === "completed") { result.skipped++; continue; }
 
     let homeId: string | null = null;
     let awayId: string | null = null;
@@ -358,19 +428,31 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
       awayId = resolveSlot(slot.away);
     }
 
-    if (!homeId || !awayId) { result.skipped++; continue; }
-    await insertFixture(slot.matchNumber, slot.stage, homeId, awayId);
+    await insertFixture(
+      slot.matchNumber,
+      slot.stage,
+      homeId,
+      awayId,
+      slotPlaceholder(slot.home),
+      slotPlaceholder(slot.away),
+    );
   }
 
   // ── Process R16 → Final ───────────────────────────────────────────────────
   for (const slot of KNOCKOUT) {
-    if (existing.has(slot.matchNumber)) { result.skipped++; continue; }
+    if (existing.get(slot.matchNumber)?.status === "completed") { result.skipped++; continue; }
 
     const homeId = resolveSlot(slot.home);
     const awayId = resolveSlot(slot.away);
 
-    if (!homeId || !awayId) { result.skipped++; continue; }
-    await insertFixture(slot.matchNumber, slot.stage, homeId, awayId);
+    await insertFixture(
+      slot.matchNumber,
+      slot.stage,
+      homeId,
+      awayId,
+      slotPlaceholder(slot.home),
+      slotPlaceholder(slot.away),
+    );
   }
 
   return result;

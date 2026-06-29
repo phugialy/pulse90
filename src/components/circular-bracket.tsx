@@ -1,97 +1,348 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
 import { useState } from "react";
-import type { R32Slot } from "./standings-tabs";
+import type { R32Slot, KnockoutFixtureSlot } from "./standings-tabs";
 
-// ─── Layout ───────────────────────────────────────────────────────────────────
+// ─── Bracket order (top-to-bottom on each side) ───────────────────────────────
+// Left half → SF M101 → Final M104
+const L_R32 = [74, 77, 73, 75, 83, 84, 81, 82];
+const L_R16 = [89, 90, 93, 94];
+const L_QF  = [97, 98];
+// Right half → SF M102 → Final M104
+const R_R32 = [76, 78, 79, 80, 86, 88, 85, 87];
+const R_R16 = [91, 92, 95, 96];
+const R_QF  = [99, 100];
 
-const CX = 400, CY = 400;
-const R_BADGE = 340;   // outer ring — team badge centres
-const R_R32   = 275;   // R32 convergence nodes
-const R_R16   = 210;   // R16 convergence nodes
-const R_QF    = 152;   // QF convergence nodes
-const R_SF    = 103;   // SF convergence nodes
-const BADGE_R = 22;    // radius of each team badge circle
+// ─── SVG layout ───────────────────────────────────────────────────────────────
 
-// ─── Match → circle position ──────────────────────────────────────────────────
-// 32 slots, clockwise from top (−90°).
-// Right half (0–15) feeds M101 (left SF path); left half (16–31) feeds M102.
-// Within each quarter: groups of 4 ordered so R16/QF/SF lines flow cleanly inward.
+const VW = 1100, VH = 590;
+const CW = 85, CH = 44;   // card width / height
 
-const MATCH_POS: Record<number, [number, number]> = {
-  // Quarter A (right-top, 0–7) → M89 / M90 → M97 → M101
-  74: [0, 1],
-  77: [2, 3],
-  73: [4, 5],
-  75: [6, 7],
-  // Quarter B (right-bottom, 8–15) → M93 / M94 → M98 → M101
-  83: [8, 9],
-  84: [10, 11],
-  81: [12, 13],
-  82: [14, 15],
-  // Quarter C (left-bottom, 16–23) → M91 / M92 → M99 → M102
-  76: [16, 17],
-  78: [18, 19],
-  79: [20, 21],
-  80: [22, 23],
-  // Quarter D (left-top, 24–31) → M95 / M96 → M100 → M102
-  86: [24, 25],
-  88: [26, 27],
-  85: [28, 29],
-  87: [30, 31],
+// Column left-edge x positions
+const L0 = 5,   L1 = 108, L2 = 211, L3 = 314;   // left side  R32→R16→QF→SF
+const FX = 508;                                    // Final card (centred)
+const R3 = 701, R2 = 804, R1 = 907, R0 = 1010;   // right side SF→QF→R16→R32
+
+// Bracket joint mid-x values (midpoint of each column gap)
+const ML1 = 99,   ML2 = 202, ML3 = 305, MLF = 453;   // left  R32→R16→QF→SF→Final
+const MR1 = 1001, MR2 = 898, MR3 = 795, MRF = 647;   // right R32→R16→QF→SF→Final
+
+// Y positions
+const YTOP = 24;   // height reserved for round labels
+const YSTEP = 70;  // pixels per R32 slot
+
+const y32 = (i: number) => YTOP + YSTEP * i + YSTEP / 2;
+const y16 = (i: number) => (y32(i * 2) + y32(i * 2 + 1)) / 2;
+const yqf = (i: number) => (y16(i * 2) + y16(i * 2 + 1)) / 2;
+const ysf = ()           => (yqf(0) + yqf(1)) / 2;
+const Y_MID = ysf();  // SF and Final share the same y-centre
+
+// ─── Data types ───────────────────────────────────────────────────────────────
+
+type Team = {
+  name: string;
+  flagEmoji: string;
+  flagAssetUrl: string | null;
+  slug?: string;
 };
 
-// ─── Geometry ─────────────────────────────────────────────────────────────────
-
-function angleOf(pos: number) {
-  return ((-90 + (pos / 32) * 360) * Math.PI) / 180;
-}
-
-function pt(pos: number, r: number): [number, number] {
-  const a = angleOf(pos);
-  return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
-}
-
-function mid(posA: number, posB: number, r: number): [number, number] {
-  return pt((posA + posB) / 2, r);
-}
-
-// ─── Slot lookup ──────────────────────────────────────────────────────────────
-
-type PosEntry = {
-  slot: R32Slot;
-  isHome: boolean;
+type Match = {
+  home: Team | null;
+  away: Team | null;
+  hLabel: string;
+  aLabel: string;
+  hScore: number | null;
+  aScore: number | null;
+  finished: boolean;
 };
 
-function buildPosMap(slots: R32Slot[]): Map<number, PosEntry> {
-  const map = new Map<number, PosEntry>();
-  for (const slot of slots) {
-    const positions = MATCH_POS[slot.matchNumber];
-    if (!positions) continue;
-    map.set(positions[0], { slot, isHome: true });
-    map.set(positions[1], { slot, isHome: false });
+// Which match feeds into which next match, and as home or away
+const ADVANCEMENT: Record<number, [nextMn: number, slot: "home" | "away"]> = {
+  // R32 → R16
+  74: [89, "home"], 77: [89, "away"],
+  73: [90, "home"], 75: [90, "away"],
+  83: [93, "home"], 84: [93, "away"],
+  81: [94, "home"], 82: [94, "away"],
+  76: [91, "home"], 78: [91, "away"],
+  79: [92, "home"], 80: [92, "away"],
+  86: [95, "home"], 88: [95, "away"],
+  85: [96, "home"], 87: [96, "away"],
+  // R16 → QF
+  89: [97, "home"], 90: [97, "away"],
+  93: [98, "home"], 94: [98, "away"],
+  91: [99, "home"], 92: [99, "away"],
+  95: [100, "home"], 96: [100, "away"],
+  // QF → SF
+  97: [101, "home"], 98: [101, "away"],
+  99: [102, "home"], 100: [102, "away"],
+  // SF → Final
+  101: [104, "home"], 102: [104, "away"],
+};
+
+function buildMap(
+  r32s: R32Slot[],
+  kos: KnockoutFixtureSlot[],
+): Map<number, Match> {
+  const map = new Map<number, Match>();
+
+  const isFinished = (s?: string) =>
+    s === "full_time" || s === "post_game" || s === "final";
+
+  for (const s of r32s) {
+    map.set(s.matchNumber, {
+      home: s.home.team
+        ? { name: s.home.team.name, flagEmoji: s.home.team.flagEmoji, flagAssetUrl: s.home.team.flagAssetUrl, slug: s.home.team.slug }
+        : null,
+      away: s.away.team
+        ? { name: s.away.team.name, flagEmoji: s.away.team.flagEmoji, flagAssetUrl: s.away.team.flagAssetUrl, slug: s.away.team.slug }
+        : null,
+      hLabel: s.home.label,
+      aLabel: s.away.label,
+      hScore: s.homeScore ?? null,
+      aScore: s.awayScore ?? null,
+      finished: isFinished(s.status) || s.homeScore != null,
+    });
   }
+
+  for (const s of kos) {
+    map.set(s.matchNumber, {
+      home: s.home
+        ? { name: s.home.name, flagEmoji: s.home.flagEmoji, flagAssetUrl: s.home.flagAssetUrl, slug: s.home.slug }
+        : null,
+      away: s.away
+        ? { name: s.away.name, flagEmoji: s.away.flagEmoji, flagAssetUrl: s.away.flagAssetUrl, slug: s.away.slug }
+        : null,
+      hLabel: s.homePlaceholder ?? "TBD",
+      aLabel: s.awayPlaceholder ?? "TBD",
+      hScore: s.homeScore ?? null,
+      aScore: s.awayScore ?? null,
+      finished: isFinished(s.status) || s.homeScore != null,
+    });
+  }
+
+  // Client-side winner propagation: fill next-round slot if Supabase hasn't yet
+  for (const mn of [...map.keys()]) {
+    const adv = ADVANCEMENT[mn];
+    if (!adv) continue;
+    const m = map.get(mn)!;
+    if (!m.finished) continue;
+
+    // Determine winner by score (handles 90-min + ET; ties = can't tell client-side)
+    const winner =
+      m.hScore != null && m.aScore != null && m.hScore !== m.aScore
+        ? m.hScore > m.aScore ? m.home : m.away
+        : null;
+    if (!winner) continue;
+
+    const [nextMn, slot] = adv;
+    let next = map.get(nextMn);
+    if (!next) {
+      next = { home: null, away: null, hLabel: "TBD", aLabel: "TBD", hScore: null, aScore: null, finished: false };
+      map.set(nextMn, next);
+    }
+    // Only fill if the DB hasn't already set this slot
+    if (slot === "home" && !next.home) next.home = winner;
+    if (slot === "away" && !next.away) next.away = winner;
+  }
+
   return map;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Connector lines ──────────────────────────────────────────────────────────
 
-export function CircularBracket({ slots }: { slots: R32Slot[] }) {
-  const [hoveredPos, setHoveredPos] = useState<number | null>(null);
-  const posMap = buildPosMap(slots);
+// Left-side: pair of cards (right edge at cardR) → joint midX → next card left edge nextX
+function LConn({
+  cardR, midX, nextX, ya, yb, color,
+}: {
+  cardR: number; midX: number; nextX: number;
+  ya: number; yb: number; color: string;
+}) {
+  const ym = (ya + yb) / 2;
+  return (
+    <g stroke={color} strokeWidth={1} fill="none">
+      <line x1={cardR} y1={ya} x2={midX} y2={ya} />
+      <line x1={cardR} y1={yb} x2={midX} y2={yb} />
+      <line x1={midX}  y1={ya} x2={midX} y2={yb} />
+      <line x1={midX}  y1={ym} x2={nextX} y2={ym} />
+    </g>
+  );
+}
 
-  // Derive per-position display data
-  function posInfo(pos: number) {
-    const entry = posMap.get(pos);
-    if (!entry) return { team: null, label: "?", isLocked: false, isKnown: false };
-    const seed = entry.isHome ? entry.slot.home : entry.slot.away;
-    const team = seed.team;
-    const isLocked = team?.qualificationStatus === "advancing" && (team?.played ?? 0) >= 3;
-    const isKnown = team !== null;
-    return { team, label: seed.label, isLocked, isKnown };
-  }
+// Right-side: pair of cards (left edge at cardL) → joint midX → next card right edge nextR
+function RConn({
+  cardL, midX, nextR, ya, yb, color,
+}: {
+  cardL: number; midX: number; nextR: number;
+  ya: number; yb: number; color: string;
+}) {
+  const ym = (ya + yb) / 2;
+  return (
+    <g stroke={color} strokeWidth={1} fill="none">
+      <line x1={cardL} y1={ya} x2={midX} y2={ya} />
+      <line x1={cardL} y1={yb} x2={midX} y2={yb} />
+      <line x1={midX}  y1={ya} x2={midX} y2={yb} />
+      <line x1={midX}  y1={ym} x2={nextR} y2={ym} />
+    </g>
+  );
+}
+
+// ─── Color palette per stage ──────────────────────────────────────────────────
+
+const C = {
+  r32:  "rgba(255,255,255,0.13)",
+  r16:  "rgba(100,200,255,0.38)",
+  qf:   "rgba(255,185,45,0.48)",
+  sf:   "rgba(247,209,73,0.68)",
+  fin:  "rgba(247,209,73,0.95)",
+};
+
+// ─── Match card ───────────────────────────────────────────────────────────────
+
+const FW = 18, FH = 12;  // flag image dimensions
+const trunc = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+
+function Card({
+  x, y, mn, map, hov, setHov, color,
+}: {
+  x: number; y: number; mn: number;
+  map: Map<number, Match>;
+  hov: number | null;
+  setHov: (n: number | null) => void;
+  color: string;
+}) {
+  const m   = map.get(mn);
+  const isH = hov === mn;
+
+  // Row y-centres (card spans y-22 to y+22; divider at y; rows centred in each half)
+  const hy = y - CH / 2 + 3 + (CH / 2 - 3) / 2;   // ≈ y − 8.5
+  const ay = y + 3 + (CH / 2 - 3) / 2;              // ≈ y + 13.5
+
+  const showScore = m?.finished ?? false;
+
+  const renderRow = (team: Team | null, label: string, ry: number, score: number | null) => {
+    if (!team) {
+      return (
+        <text
+          x={x + 5} y={ry}
+          dominantBaseline="middle"
+          fontSize="8" fontWeight="600"
+          fill="rgba(255,255,255,0.28)"
+          style={{ fontFamily: "system-ui" }}
+        >
+          {trunc(label, 14)}
+        </text>
+      );
+    }
+    const nameX = x + 4 + (team.flagAssetUrl ? FW + 3 : 19);
+    const maxCh = showScore ? 9 : 11;
+    return (
+      <>
+        {team.flagAssetUrl ? (
+          <image
+            href={team.flagAssetUrl}
+            x={x + 4} y={ry - FH / 2}
+            width={FW} height={FH}
+            preserveAspectRatio="xMidYMid slice"
+          />
+        ) : (
+          <text
+            x={x + 13} y={ry}
+            textAnchor="middle" dominantBaseline="middle"
+            fontSize="13"
+            style={{ userSelect: "none" }}
+          >
+            {team.flagEmoji}
+          </text>
+        )}
+        <text
+          x={nameX} y={ry}
+          dominantBaseline="middle"
+          fontSize="9" fontWeight="900"
+          fill="rgba(255,255,255,0.87)"
+          style={{ fontFamily: "system-ui" }}
+        >
+          {trunc(team.name, maxCh)}
+        </text>
+        {score != null && (
+          <text
+            x={x + CW - 4} y={ry}
+            textAnchor="end" dominantBaseline="middle"
+            fontSize="10" fontWeight="900"
+            fill="rgba(247,209,73,0.95)"
+            style={{ fontFamily: "system-ui" }}
+          >
+            {score}
+          </text>
+        )}
+      </>
+    );
+  };
+
+  return (
+    <g
+      onMouseEnter={() => setHov(mn)}
+      onMouseLeave={() => setHov(null)}
+      style={{ cursor: "default" }}
+    >
+      {/* Card background */}
+      <rect
+        x={x} y={y - CH / 2}
+        width={CW} height={CH}
+        rx={5}
+        fill={isH ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.05)"}
+        stroke={isH ? "rgba(255,255,255,0.42)" : color}
+        strokeWidth={0.9}
+      />
+      {/* Divider */}
+      <line
+        x1={x + 3} y1={y} x2={x + CW - 3} y2={y}
+        stroke="rgba(255,255,255,0.07)" strokeWidth={0.6}
+      />
+      {/* Match number */}
+      <text
+        x={x + CW / 2} y={y - CH / 2 - 6}
+        textAnchor="middle" dominantBaseline="middle"
+        fontSize="7" fontWeight="900"
+        fill="rgba(255,255,255,0.2)"
+        style={{ fontFamily: "system-ui" }}
+      >
+        M{mn}
+      </text>
+      {/* Team rows */}
+      {renderRow(m?.home ?? null, m?.hLabel ?? "TBD", hy, showScore ? (m?.hScore ?? null) : null)}
+      {renderRow(m?.away ?? null, m?.aLabel ?? "TBD", ay, showScore ? (m?.aScore ?? null) : null)}
+    </g>
+  );
+}
+
+// ─── Round column label ───────────────────────────────────────────────────────
+
+function RoundLabel({ x, text, color }: { x: number; text: string; color: string }) {
+  return (
+    <text
+      x={x + CW / 2} y={13}
+      textAnchor="middle" dominantBaseline="middle"
+      fontSize="7" fontWeight="900" letterSpacing="0.1em"
+      fill={color}
+      style={{ fontFamily: "system-ui" }}
+    >
+      {text}
+    </text>
+  );
+}
+
+// ─── Main export ──────────────────────────────────────────────────────────────
+
+export function CircularBracket({
+  slots,
+  knockoutSlots = [],
+}: {
+  slots: R32Slot[];
+  knockoutSlots?: KnockoutFixtureSlot[];
+}) {
+  const [hov, setHov] = useState<number | null>(null);
+  const map = buildMap(slots, knockoutSlots);
+  const hovMatch = hov != null ? map.get(hov) : null;
 
   return (
     <div className="overflow-hidden rounded-[28px] bg-[#10131a] shadow-[0_0_0_1px_rgba(247,209,73,0.12),0_24px_60px_rgba(16,19,26,0.45)]">
@@ -106,15 +357,15 @@ export function CircularBracket({ slots }: { slots: R32Slot[] }) {
           </p>
           <h2 className="mt-1 text-2xl font-black text-white">Tournament Bracket</h2>
           <p className="mt-0.5 text-sm font-bold text-white/35">
-            32 → 16 → QF → SF → Final · click any team to visit their page
+            Full draw · R32 → R16 → QF → SF → Final · hover any match
           </p>
         </div>
-        {/* Legend */}
         <div className="flex flex-col gap-1.5">
           {[
-            { color: "border-[#f7d149] bg-[#f7d149]/20", label: "Qualified (locked)" },
-            { color: "border-sky-400/40 bg-sky-400/10", label: "Leading (provisional)" },
-            { color: "border-white/10 bg-white/5", label: "3rd-place slot" },
+            { color: "bg-white/10 border-white/15", label: "Round of 32" },
+            { color: "bg-sky-400/10 border-sky-400/40", label: "Round of 16" },
+            { color: "bg-amber-400/10 border-amber-400/40", label: "Quarter-final" },
+            { color: "bg-[#f7d149]/15 border-[#f7d149]/50", label: "Semi / Final" },
           ].map(({ color, label }) => (
             <div key={label} className="flex items-center gap-2">
               <span className={`inline-block size-3 rounded-full border ${color}`} />
@@ -124,253 +375,136 @@ export function CircularBracket({ slots }: { slots: R32Slot[] }) {
         </div>
       </div>
 
-      {/* SVG */}
-      <div className="flex items-center justify-center p-4 pt-2 pb-6">
+      {/* Bracket SVG */}
+      <div className="overflow-x-auto p-4 pt-3 pb-2">
         <svg
-          viewBox="0 0 800 800"
+          viewBox={`0 0 ${VW} ${VH}`}
           xmlns="http://www.w3.org/2000/svg"
           className="w-full"
-          style={{ maxWidth: 600, maxHeight: 600 }}
+          style={{ minWidth: 600, maxWidth: VW }}
         >
-          <defs>
-            <clipPath id="cb-clip">
-              <circle cx="0" cy="0" r={BADGE_R - 1} />
-            </clipPath>
-            <radialGradient id="cb-glow" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#f7d149" stopOpacity="0.5" />
-              <stop offset="100%" stopColor="#f7d149" stopOpacity="0" />
-            </radialGradient>
-          </defs>
+          {/* ── Round labels ─────────────────────────────────────── */}
+          <RoundLabel x={L0} text="ROUND OF 32"   color="rgba(255,255,255,0.3)" />
+          <RoundLabel x={L1} text="ROUND OF 16"   color="rgba(100,200,255,0.52)" />
+          <RoundLabel x={L2} text="QUARTER-FINAL" color="rgba(255,185,45,0.58)" />
+          <RoundLabel x={L3} text="SEMI-FINAL"    color="rgba(247,209,73,0.72)" />
+          <RoundLabel x={FX} text="FINAL"         color="rgba(247,209,73,0.98)" />
+          <RoundLabel x={R3} text="SEMI-FINAL"    color="rgba(247,209,73,0.72)" />
+          <RoundLabel x={R2} text="QUARTER-FINAL" color="rgba(255,185,45,0.58)" />
+          <RoundLabel x={R1} text="ROUND OF 16"   color="rgba(100,200,255,0.52)" />
+          <RoundLabel x={R0} text="ROUND OF 32"   color="rgba(255,255,255,0.3)" />
 
-          {/* Background */}
-          <circle cx={CX} cy={CY} r={390} fill="#0d1018" />
+          {/* ── LEFT bracket connectors ──────────────────────────── */}
 
-          {/* Ring guides */}
-          {[R_BADGE, R_R32, R_R16, R_QF, R_SF].map((r) => (
-            <circle key={r} cx={CX} cy={CY} r={r} fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+          {/* R32 → R16 (4 pairs) */}
+          {[0, 1, 2, 3].map((i) => (
+            <LConn key={`lr32-${i}`}
+              cardR={L0 + CW} midX={ML1} nextX={L1}
+              ya={y32(i * 2)} yb={y32(i * 2 + 1)}
+              color={C.r32}
+            />
           ))}
 
-          {/* ── Bracket lines ─────────────────────────────────────── */}
-
-          {/* R32: each team badge → R32 convergence node */}
-          {Array.from({ length: 16 }, (_, i) => {
-            const p1 = i * 2, p2 = i * 2 + 1;
-            const [x1, y1] = pt(p1, R_BADGE - BADGE_R);
-            const [x2, y2] = pt(p2, R_BADGE - BADGE_R);
-            const [mx, my] = mid(p1, p2, R_R32);
-            return (
-              <g key={`r32l-${i}`}>
-                <line x1={x1} y1={y1} x2={mx} y2={my} stroke="rgba(255,255,255,0.12)" strokeWidth="1.2" />
-                <line x1={x2} y1={y2} x2={mx} y2={my} stroke="rgba(255,255,255,0.12)" strokeWidth="1.2" />
-              </g>
-            );
-          })}
-
-          {/* R32 node → R16 node */}
-          {Array.from({ length: 8 }, (_, i) => {
-            const g = i * 4;
-            const [m1x, m1y] = mid(g, g + 1, R_R32);
-            const [m2x, m2y] = mid(g + 2, g + 3, R_R32);
-            const [rx, ry] = mid(g, g + 3, R_R16);
-            return (
-              <g key={`r16l-${i}`}>
-                <line x1={m1x} y1={m1y} x2={rx} y2={ry} stroke="rgba(100,180,255,0.22)" strokeWidth="1.4" />
-                <line x1={m2x} y1={m2y} x2={rx} y2={ry} stroke="rgba(100,180,255,0.22)" strokeWidth="1.4" />
-              </g>
-            );
-          })}
-
-          {/* R16 node → QF node */}
-          {Array.from({ length: 4 }, (_, i) => {
-            const g = i * 8;
-            const [m1x, m1y] = mid(g, g + 3, R_R16);
-            const [m2x, m2y] = mid(g + 4, g + 7, R_R16);
-            const [qx, qy] = mid(g, g + 7, R_QF);
-            return (
-              <g key={`qfl-${i}`}>
-                <line x1={m1x} y1={m1y} x2={qx} y2={qy} stroke="rgba(255,180,50,0.28)" strokeWidth="1.6" />
-                <line x1={m2x} y1={m2y} x2={qx} y2={qy} stroke="rgba(255,180,50,0.28)" strokeWidth="1.6" />
-              </g>
-            );
-          })}
-
-          {/* QF node → SF node */}
-          {Array.from({ length: 2 }, (_, i) => {
-            const g = i * 16;
-            const [m1x, m1y] = mid(g, g + 7, R_QF);
-            const [m2x, m2y] = mid(g + 8, g + 15, R_QF);
-            const [sx, sy] = mid(g, g + 15, R_SF);
-            return (
-              <g key={`sfl-${i}`}>
-                <line x1={m1x} y1={m1y} x2={sx} y2={sy} stroke="rgba(247,209,73,0.38)" strokeWidth="1.8" />
-                <line x1={m2x} y1={m2y} x2={sx} y2={sy} stroke="rgba(247,209,73,0.38)" strokeWidth="1.8" />
-              </g>
-            );
-          })}
-
-          {/* SF nodes → centre */}
-          {([0, 16] as const).map((g) => {
-            const [sx, sy] = mid(g, g + 15, R_SF);
-            return <line key={`finl-${g}`} x1={sx} y1={sy} x2={CX} y2={CY} stroke="rgba(247,209,73,0.55)" strokeWidth="2" />;
-          })}
-
-          {/* ── Stage nodes ────────────────────────────────────────── */}
-
-          {/* R32 nodes */}
-          {Array.from({ length: 16 }, (_, i) => {
-            const [x, y] = mid(i * 2, i * 2 + 1, R_R32);
-            return <circle key={`r32n-${i}`} cx={x} cy={y} r={3} fill="rgba(255,255,255,0.22)" />;
-          })}
-          {/* R16 nodes */}
-          {Array.from({ length: 8 }, (_, i) => {
-            const g = i * 4;
-            const [x, y] = mid(g, g + 3, R_R16);
-            return <circle key={`r16n-${i}`} cx={x} cy={y} r={4} fill="rgba(100,200,255,0.55)" />;
-          })}
-          {/* QF nodes */}
-          {Array.from({ length: 4 }, (_, i) => {
-            const g = i * 8;
-            const [x, y] = mid(g, g + 7, R_QF);
-            return <circle key={`qfn-${i}`} cx={x} cy={y} r={5} fill="rgba(255,185,45,0.65)" />;
-          })}
-          {/* SF nodes */}
-          {Array.from({ length: 2 }, (_, i) => {
-            const g = i * 16;
-            const [x, y] = mid(g, g + 15, R_SF);
-            return <circle key={`sfn-${i}`} cx={x} cy={y} r={7} fill="rgba(247,209,73,0.85)" />;
-          })}
-
-          {/* ── Match number labels (outer) ────────────────────────── */}
-          {Array.from({ length: 16 }, (_, i) => {
-            const matchNums = Object.entries(MATCH_POS).filter(([, [h]]) => h === i * 2).map(([mn]) => mn);
-            const mn = matchNums[0];
-            const [mx, my] = mid(i * 2, i * 2 + 1, R_BADGE + 30);
-            return (
-              <text key={`mn-${i}`} x={mx} y={my} textAnchor="middle" dominantBaseline="middle" fontSize="8" fontWeight="900" fill="rgba(255,255,255,0.25)" style={{ fontFamily: "system-ui" }}>
-                M{mn}
-              </text>
-            );
-          })}
-
-          {/* ── Stage ring labels ──────────────────────────────────── */}
-          {[
-            { r: R_R16 + 14, text: "R16", fill: "rgba(100,200,255,0.4)" },
-            { r: R_QF + 12,  text: "QF",  fill: "rgba(255,185,45,0.45)" },
-            { r: R_SF + 10,  text: "SF",  fill: "rgba(247,209,73,0.6)" },
-          ].map(({ r, text, fill }) => (
-            <text key={text} x={CX} y={CY - r} textAnchor="middle" dominantBaseline="middle" fontSize="8" fontWeight="900" fill={fill} style={{ fontFamily: "system-ui" }}>
-              {text}
-            </text>
+          {/* R16 → QF (2 pairs) */}
+          {[0, 1].map((i) => (
+            <LConn key={`lr16-${i}`}
+              cardR={L1 + CW} midX={ML2} nextX={L2}
+              ya={y16(i * 2)} yb={y16(i * 2 + 1)}
+              color={C.r16}
+            />
           ))}
 
-          {/* ── Centre (Final / Trophy) ────────────────────────────── */}
-          <circle cx={CX} cy={CY} r={65} fill="url(#cb-glow)" />
-          <circle cx={CX} cy={CY} r={40} fill="rgba(247,209,73,0.12)" stroke="rgba(247,209,73,0.5)" strokeWidth="1.5" />
-          <text x={CX} y={CY - 2} textAnchor="middle" dominantBaseline="middle" fontSize="26">🏆</text>
-          <text x={CX} y={CY + 54} textAnchor="middle" dominantBaseline="middle" fontSize="8" fontWeight="900" fill="rgba(247,209,73,0.65)" letterSpacing="0.2em" style={{ fontFamily: "system-ui" }}>
-            FINAL
-          </text>
+          {/* QF → SF */}
+          <LConn
+            cardR={L2 + CW} midX={ML3} nextX={L3}
+            ya={yqf(0)} yb={yqf(1)}
+            color={C.qf}
+          />
 
-          {/* ── Team badges ────────────────────────────────────────── */}
-          {Array.from({ length: 32 }, (_, pos) => {
-            const { team, label, isLocked, isKnown } = posInfo(pos);
-            const [bx, by] = pt(pos, R_BADGE);
-            const isHov = hoveredPos === pos;
-            const isThird = label.startsWith("3rd") || (!isKnown && !label.match(/^[A-L][12]$/));
+          {/* SF → Final */}
+          <line x1={L3 + CW} y1={Y_MID} x2={FX} y2={Y_MID} stroke={C.sf} strokeWidth={1.5} />
 
-            const badgeFill = isLocked
-              ? "rgba(247,209,73,0.22)"
-              : isKnown
-                ? "rgba(255,255,255,0.1)"
-                : "rgba(255,255,255,0.04)";
-            const badgeStroke = isLocked
-              ? "#f7d149"
-              : isKnown
-                ? "rgba(255,255,255,0.22)"
-                : "rgba(255,255,255,0.08)";
-            const strokeWidth = isLocked ? 1.8 : isKnown ? 1 : 0.8;
+          {/* ── RIGHT bracket connectors ─────────────────────────── */}
 
-            const inner = (
-              <>
-                {/* Glow for locked teams */}
-                {isLocked && (
-                  <circle r={BADGE_R + 5} fill="rgba(247,209,73,0.12)" />
-                )}
-                {/* Badge background */}
-                <circle
-                  r={BADGE_R}
-                  fill={badgeFill}
-                  stroke={badgeStroke}
-                  strokeWidth={strokeWidth}
-                  style={{ transition: "fill 0.15s" }}
-                />
-                {/* Hover ring */}
-                {isHov && (
-                  <circle r={BADGE_R + 2} fill="none" stroke={isLocked ? "#f7d149" : "rgba(255,255,255,0.4)"} strokeWidth="1.5" />
-                )}
-                {/* Flag image */}
-                {team?.flagAssetUrl ? (
-                  <image
-                    href={team.flagAssetUrl}
-                    x={-(BADGE_R - 1)}
-                    y={-Math.round((BADGE_R - 1) * 0.7)}
-                    width={(BADGE_R - 1) * 2}
-                    height={Math.round((BADGE_R - 1) * 1.4)}
-                    clipPath="url(#cb-clip)"
-                    preserveAspectRatio="xMidYMid slice"
-                  />
-                ) : team?.flagEmoji ? (
-                  <text textAnchor="middle" dominantBaseline="middle" fontSize={BADGE_R - 2} style={{ userSelect: "none" }}>
-                    {team.flagEmoji}
-                  </text>
-                ) : (
-                  <text textAnchor="middle" dominantBaseline="middle" fontSize="8" fontWeight="900" fill="rgba(255,255,255,0.25)" style={{ userSelect: "none", fontFamily: "system-ui" }}>
-                    {label.slice(0, 5)}
-                  </text>
-                )}
-                {/* LOCKED micro-badge */}
-                {isLocked && (
-                  <g transform={`translate(${BADGE_R - 8}, ${-(BADGE_R - 8)})`}>
-                    <circle r={6} fill="#f7d149" />
-                    <text textAnchor="middle" dominantBaseline="middle" fontSize="7" fontWeight="900" fill="#10131a" style={{ userSelect: "none" }}>✓</text>
-                  </g>
-                )}
-                {/* Tooltip on hover */}
-                {isHov && (team || label) && (
-                  <g transform={`translate(0, ${BADGE_R + 8})`}>
-                    <rect x={-50} y={0} width={100} height={20} rx={5} fill="rgba(16,19,26,0.97)" stroke="rgba(255,255,255,0.18)" strokeWidth="0.8" />
-                    <text
-                      x={0} y={10}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fontSize="8.5"
-                      fontWeight="900"
-                      fill="white"
-                      style={{ userSelect: "none", fontFamily: "system-ui" }}
-                    >
-                      {team ? (team.name.length > 14 ? team.name.slice(0, 13) + "…" : team.name) : label}
-                    </text>
-                  </g>
-                )}
-              </>
-            );
+          {/* R32 → R16 (4 pairs) */}
+          {[0, 1, 2, 3].map((i) => (
+            <RConn key={`rr32-${i}`}
+              cardL={R0} midX={MR1} nextR={R1 + CW}
+              ya={y32(i * 2)} yb={y32(i * 2 + 1)}
+              color={C.r32}
+            />
+          ))}
 
-            const slug = team?.slug;
+          {/* R16 → QF (2 pairs) */}
+          {[0, 1].map((i) => (
+            <RConn key={`rr16-${i}`}
+              cardL={R1} midX={MR2} nextR={R2 + CW}
+              ya={y16(i * 2)} yb={y16(i * 2 + 1)}
+              color={C.r16}
+            />
+          ))}
 
-            return (
-              <g
-                key={pos}
-                transform={`translate(${bx}, ${by})`}
-                onMouseEnter={() => setHoveredPos(pos)}
-                onMouseLeave={() => setHoveredPos(null)}
-                style={{ cursor: slug ? "pointer" : "default" }}
-                onClick={() => { if (slug) window.location.href = `/teams/${slug}`; }}
-              >
-                {inner}
-              </g>
-            );
-          })}
+          {/* QF → SF */}
+          <RConn
+            cardL={R2} midX={MR3} nextR={R3 + CW}
+            ya={yqf(0)} yb={yqf(1)}
+            color={C.qf}
+          />
+
+          {/* SF → Final */}
+          <line x1={R3} y1={Y_MID} x2={FX + CW} y2={Y_MID} stroke={C.sf} strokeWidth={1.5} />
+
+          {/* ── LEFT match cards ─────────────────────────────────── */}
+
+          {L_R32.map((mn, i) => (
+            <Card key={mn} x={L0} y={y32(i)} mn={mn} map={map} hov={hov} setHov={setHov} color={C.r32} />
+          ))}
+          {L_R16.map((mn, i) => (
+            <Card key={mn} x={L1} y={y16(i)} mn={mn} map={map} hov={hov} setHov={setHov} color={C.r16} />
+          ))}
+          {L_QF.map((mn, i) => (
+            <Card key={mn} x={L2} y={yqf(i)} mn={mn} map={map} hov={hov} setHov={setHov} color={C.qf} />
+          ))}
+          <Card x={L3} y={Y_MID} mn={101} map={map} hov={hov} setHov={setHov} color={C.sf} />
+
+          {/* ── FINAL ────────────────────────────────────────────── */}
+          <Card x={FX} y={Y_MID} mn={104} map={map} hov={hov} setHov={setHov} color={C.fin} />
+
+          {/* ── RIGHT match cards ────────────────────────────────── */}
+
+          {R_R32.map((mn, i) => (
+            <Card key={mn} x={R0} y={y32(i)} mn={mn} map={map} hov={hov} setHov={setHov} color={C.r32} />
+          ))}
+          {R_R16.map((mn, i) => (
+            <Card key={mn} x={R1} y={y16(i)} mn={mn} map={map} hov={hov} setHov={setHov} color={C.r16} />
+          ))}
+          {R_QF.map((mn, i) => (
+            <Card key={mn} x={R2} y={yqf(i)} mn={mn} map={map} hov={hov} setHov={setHov} color={C.qf} />
+          ))}
+          <Card x={R3} y={Y_MID} mn={102} map={map} hov={hov} setHov={setHov} color={C.sf} />
         </svg>
+      </div>
+
+      {/* Hover info panel */}
+      <div className="flex h-12 items-center justify-center px-6 pb-4">
+        {hovMatch ? (
+          <div className="text-center">
+            <div className="text-sm font-bold text-white/80">
+              <span>{hovMatch.home?.name ?? hovMatch.hLabel}</span>
+              <span className="mx-2 font-normal text-white/30">vs</span>
+              <span>{hovMatch.away?.name ?? hovMatch.aLabel}</span>
+            </div>
+            {(hovMatch.hScore != null || !hovMatch.home) && (
+              <div className="mt-0.5 text-xs text-white/35">
+                {hovMatch.finished && hovMatch.hScore != null
+                  ? `${hovMatch.hScore} – ${hovMatch.aScore}`
+                  : "Upcoming"}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-white/20">hover a match to see details</p>
+        )}
       </div>
     </div>
   );

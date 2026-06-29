@@ -33,7 +33,9 @@ export function WhoWinsVote({
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
-    setVoted(localStorage.getItem(`vote_${fixtureId}`) ?? "");
+    queueMicrotask(() => {
+      setVoted(localStorage.getItem(`vote_${fixtureId}`) ?? "");
+    });
   }, [fixtureId]);
 
   function getOrCreateSession(): string {

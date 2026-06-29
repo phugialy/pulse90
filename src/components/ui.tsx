@@ -655,7 +655,7 @@ function LiveBoardCard({ match }: { match: LiveBoardMatch }) {
                 {flag && <span className="leading-none">{flag}</span>}
                 <span>⚽</span>
                 <span>{ev.title.replace(/\s+\d+(\+\d+)?'$/, "")}</span>
-                {ev.minute && <span className="text-white/45">{ev.minute}{ev.stoppageMinute ? `+${ev.stoppageMinute}` : ""}'</span>}
+                {ev.minute && <span className="text-white/45">{ev.minute}{ev.stoppageMinute ? `+${ev.stoppageMinute}` : ""}&apos;</span>}
                 {ev.eventType === "own_goal" && <span className="text-white/40">OG</span>}
                 {ev.eventType === "penalty_goal" && <span className="text-cobalt">pen</span>}
               </span>
@@ -672,7 +672,7 @@ function LiveBoardCard({ match }: { match: LiveBoardMatch }) {
                 {flag && <span className="leading-none">{flag}</span>}
                 <span>{ev.eventType === "red_card" ? "🟥" : "🟨"}</span>
                 <span>{ev.title.replace(/\s+\d+(\+\d+)?'$/, "")}</span>
-                {ev.minute && <span className="text-white/40">{ev.minute}'</span>}
+                {ev.minute && <span className="text-white/40">{ev.minute}&apos;</span>}
               </span>
             );
           })}

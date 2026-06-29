@@ -30,8 +30,10 @@ type FixtureCardRow = {
   implication: string | null;
   home_team: string | null;
   home_team_slug: string | null;
+  home_placeholder?: string | null;
   away_team: string | null;
   away_team_slug: string | null;
+  away_placeholder?: string | null;
   venue: string | null;
   host_city: string | null;
 };
@@ -466,12 +468,26 @@ function formatMatchDate(startsAt: string) {
   }).format(new Date(startsAt));
 }
 
+function formatStageLabel(stage: string) {
+  const labels: Record<string, string> = {
+    final: "Final",
+    group: "Group stage",
+    quarter_final: "Quarter Final",
+    round_of_16: "Best of 16",
+    round_of_32: "Best of 32",
+    semi_final: "Semi Final",
+    third_place: "Third Place",
+  };
+
+  return labels[stage] ?? stage;
+}
+
 function mapFixture(
   row: FixtureCardRow,
   teamFlags: Map<string, FixtureTeamFlag> = new Map(),
 ): Match {
-  const home = row.home_team ?? "TBD";
-  const away = row.away_team ?? "TBD";
+  const home = row.home_team ?? row.home_placeholder ?? "TBD";
+  const away = row.away_team ?? row.away_placeholder ?? "TBD";
   const status =
     row.status === "live" || row.status === "completed" ? row.status : "scheduled";
   const homeFlag = row.home_team_slug ? teamFlags.get(row.home_team_slug) : undefined;
@@ -501,7 +517,7 @@ function mapFixture(
     place: row.host_city ?? "TBD",
     venue: row.venue ?? "TBD",
     stage: row.stage,
-    group: row.group_code ? `Group ${row.group_code}` : row.stage,
+    group: row.group_code ? `Group ${row.group_code}` : formatStageLabel(row.stage),
     tag: row.importance_reason ?? "Watch",
     reason: row.importance_reason ?? "Tournament context",
     stakes: row.stakes ?? "Context is being reviewed.",
@@ -1911,6 +1927,23 @@ export type R32FixtureDetail = {
   awayScore: number | null;
 };
 
+export type KnockoutFixtureTeam = {
+  slug: string;
+  name: string;
+  fifaCode: string;
+  flagEmoji: string;
+  flagAssetUrl: string | null;
+} | null;
+
+export type KnockoutFixtureDetail = R32FixtureDetail & {
+  matchNumber: number;
+  stage: string;
+  home: KnockoutFixtureTeam;
+  away: KnockoutFixtureTeam;
+  homePlaceholder: string | null;
+  awayPlaceholder: string | null;
+};
+
 export async function getR32Fixtures(): Promise<Map<number, R32FixtureDetail>> {
   const supabase = getSupabaseReadClient();
   if (!supabase) return new Map();
@@ -1942,5 +1975,92 @@ export async function getR32Fixtures(): Promise<Map<number, R32FixtureDetail>> {
       awayScore: row.away_score,
     });
   }
+  return map;
+}
+
+export async function getKnockoutFixtures(): Promise<Map<number, KnockoutFixtureDetail>> {
+  const supabase = getSupabaseReadClient();
+  if (!supabase) return new Map();
+
+  const { data, error } = await supabase
+    .from("fixtures")
+    .select(
+      "match_number, stage, starts_at, status, home_score, away_score, home_team_id, away_team_id, home_placeholder, away_placeholder, venues(name, host_city)",
+    )
+    .gte("match_number", 73)
+    .lte("match_number", 104)
+    .order("match_number", { ascending: true });
+
+  if (error || !data) return new Map();
+
+  type KnockoutFixtureRow = {
+    match_number: number;
+    stage: string;
+    starts_at: string;
+    status: string;
+    home_score: number | null;
+    away_score: number | null;
+    home_team_id: string | null;
+    away_team_id: string | null;
+    home_placeholder: string | null;
+    away_placeholder: string | null;
+    venues: { name: string | null; host_city: string | null } | { name: string | null; host_city: string | null }[] | null;
+  };
+
+  const rows = data as KnockoutFixtureRow[];
+  const teamIds = Array.from(
+    new Set(
+      rows
+        .flatMap((row) => [row.home_team_id, row.away_team_id])
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+
+  const teamsById = new Map<string, KnockoutFixtureTeam>();
+  if (teamIds.length > 0) {
+    const teamsResult = await supabase
+      .from("teams")
+      .select("id, slug, name, fifa_code, flag_emoji, flag_asset_url")
+      .in("id", teamIds);
+
+    type TeamLookupRow = {
+      id: string;
+      slug: string;
+      name: string;
+      fifa_code: string;
+      flag_emoji: string | null;
+      flag_asset_url: string | null;
+    };
+
+    for (const team of ((teamsResult.data ?? []) as TeamLookupRow[])) {
+      teamsById.set(team.id, {
+        slug: team.slug,
+        name: team.name,
+        fifaCode: team.fifa_code,
+        flagEmoji: flagFor(team.fifa_code, team.flag_emoji),
+        flagAssetUrl: flagAssetFor(team.fifa_code, team.flag_asset_url),
+      });
+    }
+  }
+
+  const map = new Map<number, KnockoutFixtureDetail>();
+  for (const row of rows) {
+    const venue = Array.isArray(row.venues) ? row.venues[0] : row.venues;
+    map.set(row.match_number, {
+      matchNumber: row.match_number,
+      stage: row.stage,
+      startsAt: row.starts_at,
+      venue: venue?.name ?? null,
+      hostCity: venue?.host_city ?? null,
+      status: row.status,
+      homeScore: row.home_score,
+      awayScore: row.away_score,
+      home: row.home_team_id ? (teamsById.get(row.home_team_id) ?? null) : null,
+      away: row.away_team_id ? (teamsById.get(row.away_team_id) ?? null) : null,
+      homePlaceholder: row.home_placeholder,
+      awayPlaceholder: row.away_placeholder,
+    });
+  }
+
   return map;
 }

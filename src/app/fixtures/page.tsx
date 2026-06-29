@@ -175,6 +175,45 @@ function stripMin(title: string) {
   return title.replace(/\s+\d+(?:\+\d+)?'$/, "").trim() || title;
 }
 
+function StageCard({ match, variant = "light" }: { match: Match; variant?: "dark" | "light" }) {
+  const styles: Record<string, { light: string; dark: string }> = {
+    final: {
+      dark: "border-[#ffd23f]/45 bg-[#ffd23f] text-[#10131a] shadow-[0_0_22px_rgba(255,210,63,0.22)]",
+      light: "border-[#ffd23f]/50 bg-[#fff3a3] text-[#10131a]",
+    },
+    quarter_final: {
+      dark: "border-sky-300/35 bg-sky-300/18 text-sky-100",
+      light: "border-sky-300/45 bg-sky-100 text-sky-950",
+    },
+    round_of_16: {
+      dark: "border-emerald-300/35 bg-emerald-300/18 text-emerald-100",
+      light: "border-emerald-300/45 bg-emerald-100 text-emerald-950",
+    },
+    round_of_32: {
+      dark: "border-cobalt/45 bg-cobalt text-white shadow-[0_0_22px_rgba(11,92,255,0.22)]",
+      light: "border-cobalt/25 bg-cobalt text-white",
+    },
+    semi_final: {
+      dark: "border-fuchsia-300/35 bg-fuchsia-300/18 text-fuchsia-100",
+      light: "border-fuchsia-300/45 bg-fuchsia-100 text-fuchsia-950",
+    },
+    third_place: {
+      dark: "border-orange-300/35 bg-orange-300/18 text-orange-100",
+      light: "border-orange-300/45 bg-orange-100 text-orange-950",
+    },
+  };
+  const fallback = variant === "dark"
+    ? "border-white/12 bg-white/10 text-white/72"
+    : "border-[#10131a]/10 bg-[#10131a]/5 text-[#10131a]/60";
+  const color = styles[match.stage]?.[variant] ?? fallback;
+
+  return (
+    <span className={`inline-flex min-h-8 items-center rounded-xl border px-3 py-1 text-[11px] font-black uppercase tracking-[0.12em] ${color}`}>
+      {match.group}
+    </span>
+  );
+}
+
 function NextFixtureHero({ match, events = [] }: { match: Match; events?: LiveBoardEvent[] }) {
   const isLive = match.status === "live";
   const goals = events.filter(
@@ -201,9 +240,7 @@ function NextFixtureHero({ match, events = [] }: { match: Match; events?: LiveBo
               {!isLive && <Trophy className="size-3.5" />}
               {isLive ? "Live now" : "Next up"}
             </span>
-            <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black text-white/70">
-              {match.group}
-            </span>
+            <StageCard match={match} variant="dark" />
           </div>
 
           <div className="mt-7 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
@@ -227,7 +264,7 @@ function NextFixtureHero({ match, events = [] }: { match: Match; events?: LiveBo
                     {e.eventType === "penalty_goal" && <span className="text-white/40">pen</span>}
                     {e.minute != null && (
                       <span className="ml-auto text-red-400/60 tabular-nums">
-                        {e.minute}{e.stoppageMinute ? `+${e.stoppageMinute}` : ""}'
+                        {e.minute}{e.stoppageMinute ? `+${e.stoppageMinute}` : ""}&apos;
                       </span>
                     )}
                   </div>
@@ -239,7 +276,7 @@ function NextFixtureHero({ match, events = [] }: { match: Match; events?: LiveBo
                   <div key={i} className="flex items-center justify-end gap-1.5 text-xs font-bold text-white/70">
                     {e.minute != null && (
                       <span className="mr-auto text-red-400/60 tabular-nums">
-                        {e.minute}{e.stoppageMinute ? `+${e.stoppageMinute}` : ""}'
+                        {e.minute}{e.stoppageMinute ? `+${e.stoppageMinute}` : ""}&apos;
                       </span>
                     )}
                     {e.eventType === "own_goal" && <span className="text-white/40">OG</span>}
@@ -266,7 +303,7 @@ function NextFixtureHero({ match, events = [] }: { match: Match; events?: LiveBo
                   <span key={i} className="inline-flex items-center gap-1 rounded-full bg-white/8 px-2.5 py-1 text-[11px] font-bold text-white/55">
                     {flag && <span className="leading-none">{flag}</span>}
                     {e.eventType === "red_card" ? "🟥" : "🟨"} {stripMin(e.title)}
-                    {e.minute != null && <span className="text-white/35">{e.minute}'</span>}
+                    {e.minute != null && <span className="text-white/35">{e.minute}&apos;</span>}
                   </span>
                 );
               })}
@@ -315,9 +352,7 @@ function FixtureTile({ match }: { match: Match }) {
       href={`/matches/${match.matchNumber}`}
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="rounded-full bg-[#10131a]/5 px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-cobalt">
-          {match.group}
-        </span>
+        <StageCard match={match} />
         <ArrowUpRight className="size-4 text-[#10131a]/35 transition group-hover:text-cobalt" />
       </div>
 

@@ -304,7 +304,17 @@ function GroupTable({ group, rows }: { group: string; rows: MatchCenterGroupRow[
 }
 
 function formatStage(stage: string) {
-  return stage === "group" ? "Group stage" : stage;
+  const labels: Record<string, string> = {
+    final: "Final",
+    group: "Group stage",
+    quarter_final: "Quarter Final",
+    round_of_16: "Best of 16",
+    round_of_32: "Best of 32",
+    semi_final: "Semi Final",
+    third_place: "Third Place",
+  };
+
+  return labels[stage] ?? stage;
 }
 
 function MatchPredictionsPanel({

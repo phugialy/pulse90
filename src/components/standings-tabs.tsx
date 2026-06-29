@@ -78,7 +78,7 @@ export type KnockoutFixtureSlot = {
   awayPlaceholder: string | null;
 };
 
-const TABS = ["Round of 32", "Bracket", "Top 16", "Groups"] as const;
+const TABS = ["Round of 32", "Top 16", "Groups"] as const;
 type Tab = (typeof TABS)[number];
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -723,9 +723,9 @@ export function StandingsTabs({ groups, knockoutSlots, roundOf32Slots }: {
 
       {/* Content */}
       {tab === "Groups" && <GroupsView groups={groups} />}
-      {tab === "Round of 32" && <Round32View slots={roundOf32Slots} groups={groups} />}
-      {tab === "Bracket" && <CircularBracket slots={roundOf32Slots} />}
-      {tab === "Top 16" && <Top16View slots={knockoutSlots} />}
+      {(tab === "Round of 32" || tab === "Top 16") && (
+        <CircularBracket slots={roundOf32Slots} knockoutSlots={knockoutSlots} />
+      )}
     </div>
   );
 }
