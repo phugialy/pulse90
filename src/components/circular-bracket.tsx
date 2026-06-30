@@ -53,6 +53,8 @@ type Match = {
   aLabel: string;
   hScore: number | null;
   aScore: number | null;
+  hPen: number | null;
+  aPen: number | null;
   finished: boolean;
 };
 
@@ -100,6 +102,8 @@ function buildMap(
       aLabel: s.away.label,
       hScore: s.homeScore ?? null,
       aScore: s.awayScore ?? null,
+      hPen: s.homePenalties ?? null,
+      aPen: s.awayPenalties ?? null,
       finished: isFinished(s.status) || s.homeScore != null,
     });
   }
@@ -116,6 +120,8 @@ function buildMap(
       aLabel: s.awayPlaceholder ?? "TBD",
       hScore: s.homeScore ?? null,
       aScore: s.awayScore ?? null,
+      hPen: s.homePenalties ?? null,
+      aPen: s.awayPenalties ?? null,
       finished: isFinished(s.status) || s.homeScore != null,
     });
   }
@@ -127,17 +133,21 @@ function buildMap(
     const m = map.get(mn)!;
     if (!m.finished) continue;
 
-    // Determine winner by score (handles 90-min + ET; ties = can't tell client-side)
-    const winner =
-      m.hScore != null && m.aScore != null && m.hScore !== m.aScore
-        ? m.hScore > m.aScore ? m.home : m.away
-        : null;
+    // Determine winner by score; for tied matches use penalty shootout data if available
+    let winner: Team | null = null;
+    if (m.hScore != null && m.aScore != null) {
+      if (m.hScore > m.aScore) winner = m.home;
+      else if (m.aScore > m.hScore) winner = m.away;
+      else if (m.hPen != null && m.aPen != null) {
+        winner = m.hPen > m.aPen ? m.home : m.away;
+      }
+    }
     if (!winner) continue;
 
     const [nextMn, slot] = adv;
     let next = map.get(nextMn);
     if (!next) {
-      next = { home: null, away: null, hLabel: "TBD", aLabel: "TBD", hScore: null, aScore: null, finished: false };
+      next = { home: null, away: null, hLabel: "TBD", aLabel: "TBD", hScore: null, aScore: null, hPen: null, aPen: null, finished: false };
       map.set(nextMn, next);
     }
     // Only fill if the DB hasn't already set this slot

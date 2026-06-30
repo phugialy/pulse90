@@ -126,6 +126,8 @@ export default async function GroupsPage() {
       status: fixture?.status,
       homeScore: fixture?.homeScore,
       awayScore: fixture?.awayScore,
+      homePenalties: fixture?.homePenalties,
+      awayPenalties: fixture?.awayPenalties,
     };
   });
   const knockoutSlots: KnockoutFixtureSlot[] = Array.from(knockoutFixtures.values())
@@ -139,6 +141,8 @@ export default async function GroupsPage() {
       status: fixture.status,
       homeScore: fixture.homeScore,
       awayScore: fixture.awayScore,
+      homePenalties: fixture.homePenalties,
+      awayPenalties: fixture.awayPenalties,
       home: fixture.home,
       away: fixture.away,
       homePlaceholder: fixture.homePlaceholder,

@@ -1942,6 +1942,8 @@ export type KnockoutFixtureDetail = R32FixtureDetail & {
   away: KnockoutFixtureTeam;
   homePlaceholder: string | null;
   awayPlaceholder: string | null;
+  homePenalties: number | null;
+  awayPenalties: number | null;
 };
 
 export async function getR32Fixtures(): Promise<Map<number, R32FixtureDetail>> {
@@ -1985,7 +1987,7 @@ export async function getKnockoutFixtures(): Promise<Map<number, KnockoutFixture
   const { data, error } = await supabase
     .from("fixtures")
     .select(
-      "match_number, stage, starts_at, status, home_score, away_score, home_team_id, away_team_id, home_placeholder, away_placeholder, venues(name, host_city)",
+      "match_number, stage, starts_at, status, home_score, away_score, home_penalties, away_penalties, home_team_id, away_team_id, home_placeholder, away_placeholder, venues(name, host_city)",
     )
     .gte("match_number", 73)
     .lte("match_number", 104)
@@ -2000,6 +2002,8 @@ export async function getKnockoutFixtures(): Promise<Map<number, KnockoutFixture
     status: string;
     home_score: number | null;
     away_score: number | null;
+    home_penalties: number | null;
+    away_penalties: number | null;
     home_team_id: string | null;
     away_team_id: string | null;
     home_placeholder: string | null;
@@ -2055,6 +2059,8 @@ export async function getKnockoutFixtures(): Promise<Map<number, KnockoutFixture
       status: row.status,
       homeScore: row.home_score,
       awayScore: row.away_score,
+      homePenalties: row.home_penalties ?? null,
+      awayPenalties: row.away_penalties ?? null,
       home: row.home_team_id ? (teamsById.get(row.home_team_id) ?? null) : null,
       away: row.away_team_id ? (teamsById.get(row.away_team_id) ?? null) : null,
       homePlaceholder: row.home_placeholder,

@@ -45,6 +45,7 @@ type TeamRow = {
 type EspnCompetitor = {
   homeAway: "home" | "away";
   score: string;
+  winner?: boolean;
   team: { id: string; abbreviation: string; displayName: string };
 };
 
@@ -489,6 +490,22 @@ export async function GET(request: NextRequest) {
     const homeScoreVal = isNaN(newHomeScore!) ? null : newHomeScore;
     const awayScoreVal = isNaN(newAwayScore!) ? null : newAwayScore;
 
+    // Detect penalty shootout winner via ESPN's winner flag on each competitor.
+    // Only applies to completed knockout matches (match_number >= 74) that ended level.
+    let homePenalties: number | null = null;
+    let awayPenalties: number | null = null;
+    const isKnockout = fixture.match_number >= 74;
+    if (
+      newStatus === "completed" &&
+      isKnockout &&
+      homeScoreVal !== null &&
+      awayScoreVal !== null &&
+      homeScoreVal === awayScoreVal
+    ) {
+      if (hComp?.winner) { homePenalties = 1; awayPenalties = 0; }
+      else if (aComp?.winner) { homePenalties = 0; awayPenalties = 1; }
+    }
+
     const scoreChanged =
       homeScoreVal !== fixture.home_score ||
       awayScoreVal !== fixture.away_score ||
@@ -502,6 +519,7 @@ export async function GET(request: NextRequest) {
         .update({
           home_score: homeScoreVal,
           away_score: awayScoreVal,
+          ...(homePenalties !== null ? { home_penalties: homePenalties, away_penalties: awayPenalties } : {}),
           status: newStatus,
           minute: newMinute,
           period_display: newPeriodDisplay,

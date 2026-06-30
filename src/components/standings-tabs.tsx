@@ -51,6 +51,8 @@ export type R32Slot = {
   status?: string;
   homeScore?: number | null;
   awayScore?: number | null;
+  homePenalties?: number | null;
+  awayPenalties?: number | null;
 };
 
 type KnockoutStage = "R16" | "QF" | "SF" | "3P" | "F";
@@ -72,6 +74,8 @@ export type KnockoutFixtureSlot = {
   status?: string;
   homeScore?: number | null;
   awayScore?: number | null;
+  homePenalties?: number | null;
+  awayPenalties?: number | null;
   home: KnockoutFixtureTeam;
   away: KnockoutFixtureTeam;
   homePlaceholder: string | null;

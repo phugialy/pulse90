@@ -78,23 +78,24 @@ const KNOCKOUT: FixtureSlot[] = [
   { matchNumber: 104, stage: "final",         home: { type: "winner",    match: 101 }, away: { type: "winner",    match: 102 } },
 ];
 
+// Real R32 schedule: 1 game Jun 28, then 3/day Jun 29–Jul 3.
 const MANUAL_STARTS_AT: Record<number, string> = {
-  73: "2026-06-28T19:00:00Z",
-  76: "2026-06-29T19:00:00Z",
-  74: "2026-06-30T19:00:00Z",
-  75: "2026-06-30T23:00:00Z",
-  77: "2026-07-01T19:00:00Z",
-  78: "2026-07-01T23:00:00Z",
-  79: "2026-07-02T19:00:00Z",
-  80: "2026-07-02T23:00:00Z",
-  81: "2026-07-03T19:00:00Z",
-  82: "2026-07-03T23:00:00Z",
-  83: "2026-07-04T19:00:00Z",
-  84: "2026-07-04T23:00:00Z",
-  85: "2026-07-05T19:00:00Z",
-  86: "2026-07-05T23:00:00Z",
-  87: "2026-07-06T19:00:00Z",
-  88: "2026-07-06T23:00:00Z",
+  73: "2026-06-28T20:00:00Z",  // South Africa vs Canada
+  76: "2026-06-29T16:00:00Z",  // Brazil vs Japan
+  74: "2026-06-29T20:30:00Z",  // Germany vs Paraguay
+  75: "2026-06-30T01:00:00Z",  // Netherlands vs Morocco
+  78: "2026-06-30T17:00:00Z",  // Ivory Coast vs Norway
+  77: "2026-06-30T21:00:00Z",  // France vs Sweden
+  79: "2026-07-01T01:00:00Z",  // Mexico vs Ecuador
+  80: "2026-07-01T17:00:00Z",  // England vs DR Congo
+  81: "2026-07-01T21:00:00Z",  // USA vs Bosnia-Herzegovina
+  82: "2026-07-02T01:00:00Z",  // Belgium vs Senegal
+  83: "2026-07-02T17:00:00Z",  // Portugal vs Croatia
+  84: "2026-07-02T21:00:00Z",  // Spain vs Austria
+  85: "2026-07-03T01:00:00Z",  // Switzerland vs Algeria
+  86: "2026-07-03T17:00:00Z",  // Argentina vs Cabo Verde
+  87: "2026-07-03T21:00:00Z",  // Colombia vs Ghana
+  88: "2026-07-04T01:00:00Z",  // Australia vs Egypt
   89: "2026-07-07T19:00:00Z",
   90: "2026-07-07T23:00:00Z",
   91: "2026-07-08T19:00:00Z",
@@ -147,11 +148,12 @@ async function fetchEspnForDate(dateStr: string): Promise<EspnEvent[]> {
   } catch { return []; }
 }
 
-// Prefetch the entire knockout window (Jul 1–22) in parallel, build a lookup map.
+// Prefetch the full knockout window (Jun 26–Jul 22) in parallel, build a lookup map.
 // Key: sorted normalized name pair joined by "|", value: startsAt ISO string.
+// Jun 26 start ensures all R32 matches (Jun 28–Jul 3) are covered.
 async function buildKnockoutSchedule(): Promise<Map<string, string>> {
   const dateStrs: string[] = [];
-  for (let d = new Date("2026-07-01"); d <= new Date("2026-07-22"); d.setDate(d.getDate() + 1)) {
+  for (let d = new Date("2026-06-26"); d <= new Date("2026-07-22"); d.setDate(d.getDate() + 1)) {
     dateStrs.push(
       `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`,
     );
@@ -249,28 +251,35 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
   // ── Load existing knockout fixtures (M73+) ────────────────────────────────
   const { data: existingRows } = await supabase
     .from("fixtures")
-    .select("match_number, home_team_id, away_team_id, home_score, away_score, status")
+    .select("match_number, home_team_id, away_team_id, home_score, away_score, home_penalties, away_penalties, status")
     .eq("tournament_id", TOURNAMENT_ID)
     .gte("match_number", 73);
 
-  const existing = new Map<number, { homeId: string | null; awayId: string | null; homeScore: number | null; awayScore: number | null; status: string }>();
+  const existing = new Map<number, { homeId: string | null; awayId: string | null; homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; status: string }>();
   for (const row of existingRows ?? []) {
     existing.set(row.match_number, {
       homeId: row.home_team_id,
       awayId: row.away_team_id,
       homeScore: row.home_score,
       awayScore: row.away_score,
+      homePenalties: row.home_penalties ?? null,
+      awayPenalties: row.away_penalties ?? null,
       status: row.status,
     });
   }
 
-  // Helper: winner of a completed match
+  // Helper: winner of a completed match; handles penalty shootouts via home/away_penalties
   function matchWinner(matchNumber: number): string | null {
     const f = existing.get(matchNumber);
     if (!f || f.status !== "completed" || f.homeScore == null || f.awayScore == null) return null;
     if (f.homeScore > f.awayScore) return f.homeId;
     if (f.awayScore > f.homeScore) return f.awayId;
-    return null; // draw — shouldn't happen in knockout but guard
+    // Tied after extra time — use penalty shootout result
+    if (f.homePenalties != null && f.awayPenalties != null) {
+      if (f.homePenalties > f.awayPenalties) return f.homeId;
+      if (f.awayPenalties > f.homePenalties) return f.awayId;
+    }
+    return null;
   }
 
   function matchLoser(matchNumber: number): string | null {
@@ -278,6 +287,11 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
     if (!f || f.status !== "completed" || f.homeScore == null || f.awayScore == null) return null;
     if (f.homeScore > f.awayScore) return f.awayId;
     if (f.awayScore > f.homeScore) return f.homeId;
+    // Tied — loser is the one who lost on penalties
+    if (f.homePenalties != null && f.awayPenalties != null) {
+      if (f.homePenalties > f.awayPenalties) return f.awayId;
+      if (f.awayPenalties > f.homePenalties) return f.homeId;
+    }
     return null;
   }
 
@@ -330,6 +344,7 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
   ]);
 
   const teamNames = new Map<string, string>((teamRows ?? []).map((t: { id: string; name: string }) => [t.id, t.name]));
+  const teamNameToId = new Map<string, string>((teamRows ?? []).map((t: { id: string; name: string }) => [t.name.toLowerCase(), t.id]));
   const venueIds = ((venueRows ?? []) as Array<{ id: string }>).map((venue) => venue.id);
   if (venueIds.length === 0) {
     result.errors.push("No venues found for tournament");
@@ -338,6 +353,43 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
 
   function venueForMatch(matchNumber: number) {
     return venueIds[(matchNumber - 1) % venueIds.length];
+  }
+
+  // ── ESPN-based 3rd-place team resolution ──────────────────────────────────
+  // Finds who the known team (group winner/runner-up) actually played in R32
+  // by looking up their match in the ESPN schedule near the match's kickoff time.
+  // Returns the opponent's team ID from our DB, or null if not yet scheduled/found.
+  function resolveThirdPlaceViaEspn(knownTeamId: string, matchNumber: number): string | null {
+    const knownName = teamNames.get(knownTeamId)?.toLowerCase();
+    if (!knownName) return null;
+    const approxDate = MANUAL_STARTS_AT[matchNumber];
+    if (!approxDate) return null;
+    const approxTime = new Date(approxDate).getTime();
+    const windowMs = 12 * 60 * 60 * 1000; // ±12 h window
+    const knownFirst = knownName.split(" ")[0];
+
+    for (const [key, matchDate] of espnSchedule.entries()) {
+      if (Math.abs(new Date(matchDate).getTime() - approxTime) > windowMs) continue;
+      const parts = key.split("|");
+      if (parts.length !== 2) continue;
+      const matchIdx = parts.findIndex(
+        (p) => p === knownName || p.includes(knownFirst) || knownName.includes(p.split(" ")[0]),
+      );
+      if (matchIdx === -1) continue;
+      const opponentName = parts[1 - matchIdx];
+      // Exact match
+      const exactId = teamNameToId.get(opponentName);
+      if (exactId) return exactId;
+      // Partial first-word match
+      const opFirst = opponentName.split(" ")[0];
+      for (const [dbName, teamId] of teamNameToId) {
+        const dbFirst = dbName.split(" ")[0];
+        if (dbFirst === opFirst || dbName.includes(opFirst) || opponentName.includes(dbFirst)) {
+          return teamId;
+        }
+      }
+    }
+    return null;
   }
 
   // ── Resolve a slot to a teamId ────────────────────────────────────────────
@@ -411,21 +463,42 @@ export async function seedKnockoutFixtures(): Promise<SeedResult> {
 
   // ── Process R32 ───────────────────────────────────────────────────────────
   for (const slot of R32) {
-    if (existing.get(slot.matchNumber)?.status === "completed") { result.skipped++; continue; }
-
     let homeId: string | null = null;
     let awayId: string | null = null;
 
     if (slot.home.type === "third") {
-      homeId = thirdAssignment.get(slot.matchNumber) ?? null;
+      // Try ESPN first: find who the known (away) team actually played in R32
+      const knownId = slot.away.type !== "third" ? resolveSlot(slot.away) : null;
+      homeId =
+        (knownId ? resolveThirdPlaceViaEspn(knownId, slot.matchNumber) : null) ??
+        thirdAssignment.get(slot.matchNumber) ??
+        null;
     } else {
       homeId = resolveSlot(slot.home);
     }
 
     if (slot.away.type === "third") {
-      awayId = thirdAssignment.get(slot.matchNumber) ?? null;
+      // Try ESPN first: find who the known (home) team actually played in R32
+      const knownId = slot.home.type !== "third" ? resolveSlot(slot.home) : null;
+      awayId =
+        (knownId ? resolveThirdPlaceViaEspn(knownId, slot.matchNumber) : null) ??
+        thirdAssignment.get(slot.matchNumber) ??
+        null;
     } else {
       awayId = resolveSlot(slot.away);
+    }
+
+    // Skip only when completed with exactly the teams we'd assign — avoids clobbering scores.
+    // If teams are wrong (greedy mismatch), re-seed regardless of status so score sync
+    // can then find the correct ESPN event and update scores.
+    const existingRow = existing.get(slot.matchNumber);
+    if (
+      existingRow?.status === "completed" &&
+      existingRow.homeId === homeId &&
+      existingRow.awayId === awayId
+    ) {
+      result.skipped++;
+      continue;
     }
 
     await insertFixture(
