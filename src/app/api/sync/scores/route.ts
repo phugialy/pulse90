@@ -118,14 +118,18 @@ async function fetchEspnSummary(espnEventId: string): Promise<EspnSummary | null
 async function fetchEspnScores(): Promise<EspnEvent[]> {
   const base = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
 
-  // Fetch today + yesterday so recently-finished matches aren't missed when ESPN
-  // removes them from the live scoreboard before our cron marks them completed.
+  // Fetch today + last 4 days so R32 matches (spanning Jun 28–Jul 4) are always
+  // covered even after they drop off the "yesterday" window. ESPN's scoreboard
+  // endpoint accepts any historical date, so this is safe and fast.
   const today = new Date();
-  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
   const fmt = (d: Date) =>
     `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
 
-  const urls = [`${base}?dates=${fmt(today)}`, `${base}?dates=${fmt(yesterday)}`];
+  const urls: string[] = [];
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
+    urls.push(`${base}?dates=${fmt(d)}`);
+  }
 
   const results = await Promise.allSettled(
     urls.map((url) =>
@@ -197,9 +201,14 @@ const ESPN_NAME_ALIASES: Record<string, string> = {
   "czechia": "czech republic",
   "north korea": "dpr korea",
   "ivory coast": "cote d'ivoire",
+  "cote d'ivoire": "ivory coast",
+  "côte d'ivoire": "ivory coast",
   "republic of ireland": "ireland",
   "trinidad and tobago": "trinidad",
   "cape verde": "cape verde islands",
+  "dr congo": "congo dr",
+  "congo dr": "dr congo",
+  "democratic republic of congo": "congo",
 };
 
 function matchesTeam(espnTeam: EspnCompetitor["team"], our: TeamRow): boolean {
@@ -338,8 +347,9 @@ export async function GET(request: NextRequest) {
 
   // ------------------------------------------------------------------
   // Parallel queries: active fixtures (score sync) + completed today (event backfill)
+  //                 + completed fixtures with null scores (score backfill)
   // ------------------------------------------------------------------
-  const [windowResult, completedResult] = await Promise.all([
+  const [windowResult, completedResult, nullScoreResult] = await Promise.all([
     supabase
       .from("fixtures")
       .select(
@@ -353,6 +363,12 @@ export async function GET(request: NextRequest) {
       .select("id, home_team_id, away_team_id, match_number")
       .eq("status", "completed")
       .gte("starts_at", backfillCutoff.toISOString()),
+    // Backfill: completed matches that were auto-completed without scores (ESPN mismatch)
+    supabase
+      .from("fixtures")
+      .select("id, home_team_id, away_team_id, match_number")
+      .eq("status", "completed")
+      .is("home_score", null),
   ]);
 
   if (windowResult.error) {
@@ -375,6 +391,10 @@ export async function GET(request: NextRequest) {
     FixtureRow,
     "id" | "home_team_id" | "away_team_id" | "match_number"
   >[];
+  const nullScoreFixtures = (nullScoreResult.data ?? []) as Pick<
+    FixtureRow,
+    "id" | "home_team_id" | "away_team_id" | "match_number"
+  >[];
 
   // ------------------------------------------------------------------
   // Determine completed fixtures that still need events synced
@@ -393,9 +413,9 @@ export async function GET(request: NextRequest) {
   }
 
   // ------------------------------------------------------------------
-  // Smart skip: nothing in score window AND no event backfill needed
+  // Smart skip: nothing in score window AND no event backfill AND no null scores
   // ------------------------------------------------------------------
-  if (windowFixtures.length === 0 && completedNeedingEvents.length === 0) {
+  if (windowFixtures.length === 0 && completedNeedingEvents.length === 0 && nullScoreFixtures.length === 0) {
     const { data: next } = await supabase
       .from("fixtures")
       .select("starts_at, match_number")
@@ -436,6 +456,7 @@ export async function GET(request: NextRequest) {
   const allFixtureIds = [
     ...windowFixtures,
     ...completedNeedingEvents,
+    ...nullScoreFixtures,
   ];
   const teamIds = [
     ...new Set(allFixtureIds.flatMap((f) => [f.home_team_id, f.away_team_id])),
@@ -631,6 +652,58 @@ export async function GET(request: NextRequest) {
   }
 
   // ------------------------------------------------------------------
+  // Score backfill: completed fixtures with null scores — ESPN matched them now
+  // (happens when a match was auto-completed before ESPN name matching worked,
+  //  or when ESPN data only becomes available after the match ends)
+  // ------------------------------------------------------------------
+  let scoresBackfilled = 0;
+
+  for (const fixture of nullScoreFixtures) {
+    const homeTeam = teamMap.get(fixture.home_team_id);
+    const awayTeam = teamMap.get(fixture.away_team_id);
+    if (!homeTeam || !awayTeam) continue;
+
+    const espnEvt = findEspnEvent(espnEvents, homeTeam, awayTeam);
+    if (!espnEvt) continue;
+
+    const comp = espnEvt.competitions[0];
+    const hComp = comp?.competitors.find((c) => c.homeAway === "home");
+    const aComp = comp?.competitors.find((c) => c.homeAway === "away");
+
+    const homeScoreVal = hComp ? parseInt(hComp.score, 10) : NaN;
+    const awayScoreVal = aComp ? parseInt(aComp.score, 10) : NaN;
+    if (isNaN(homeScoreVal) || isNaN(awayScoreVal)) continue;
+
+    let homePenalties: number | null = null;
+    let awayPenalties: number | null = null;
+    const isKnockout = fixture.match_number >= 74;
+    if (isKnockout && homeScoreVal === awayScoreVal) {
+      if (hComp?.winner) { homePenalties = 1; awayPenalties = 0; }
+      else if (aComp?.winner) { homePenalties = 0; awayPenalties = 1; }
+    }
+
+    await supabase
+      .from("fixtures")
+      .update({
+        home_score: homeScoreVal,
+        away_score: awayScoreVal,
+        ...(homePenalties !== null ? { home_penalties: homePenalties, away_penalties: awayPenalties } : {}),
+        source_updated_at: now.toISOString(),
+        updated_at: now.toISOString(),
+      })
+      .eq("id", fixture.id);
+
+    scoresBackfilled++;
+    updated.push({
+      matchNumber: fixture.match_number,
+      home: homeScoreVal,
+      away: awayScoreVal,
+      status: "completed",
+      minute: null,
+    });
+  }
+
+  // ------------------------------------------------------------------
   // Lineup sync: one-shot per fixture from ESPN summary endpoint
   // Skip fixtures that already have both team lineups stored (count >= 2)
   // ------------------------------------------------------------------
@@ -702,9 +775,9 @@ export async function GET(request: NextRequest) {
   }
 
   // ------------------------------------------------------------------
-  // Seed knockout fixtures when any match just completed
+  // Seed knockout fixtures when any match just completed (or backfilled)
   // ------------------------------------------------------------------
-  const anyCompleted = updated.some((u) => u.status === "completed");
+  const anyCompleted = updated.some((u) => u.status === "completed") || scoresBackfilled > 0;
   let seedResult: { created: number; skipped: number; errors: string[] } | null = null;
   if (anyCompleted) {
     seedResult = await seedKnockoutFixtures();
@@ -725,6 +798,7 @@ export async function GET(request: NextRequest) {
       espnEventsFound: espnEvents.length,
       fixtures: updated,
       eventsBackfilled,
+      scoresBackfilled,
       lineupsUpserted,
       knockoutFixturesSeeded: seedResult?.created ?? 0,
     },
@@ -736,6 +810,7 @@ export async function GET(request: NextRequest) {
     activeFixtures: windowFixtures.length,
     updated,
     eventsBackfilled,
+    scoresBackfilled,
     lineupsUpserted,
     knockoutFixturesSeeded: seedResult?.created ?? 0,
     durationMs: Date.now() - startedAt,
