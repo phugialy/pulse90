@@ -82,7 +82,7 @@ export type KnockoutFixtureSlot = {
   awayPlaceholder: string | null;
 };
 
-const TABS = ["Round of 32", "Top 16", "Groups"] as const;
+const TABS = ["Bracket", "Groups"] as const;
 type Tab = (typeof TABS)[number];
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -708,7 +708,7 @@ export function StandingsTabs({ groups, knockoutSlots, roundOf32Slots }: {
   knockoutSlots: KnockoutFixtureSlot[];
   roundOf32Slots: R32Slot[];
 }) {
-  const [tab, setTab] = useState<Tab>("Round of 32");
+  const [tab, setTab] = useState<Tab>("Bracket");
 
   return (
     <div className="space-y-6">
@@ -727,7 +727,7 @@ export function StandingsTabs({ groups, knockoutSlots, roundOf32Slots }: {
 
       {/* Content */}
       {tab === "Groups" && <GroupsView groups={groups} />}
-      {(tab === "Round of 32" || tab === "Top 16") && (
+      {tab === "Bracket" && (
         <CircularBracket slots={roundOf32Slots} knockoutSlots={knockoutSlots} />
       )}
     </div>
