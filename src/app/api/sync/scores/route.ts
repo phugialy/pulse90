@@ -228,19 +228,27 @@ function matchesTeam(espnTeam: EspnCompetitor["team"], our: TeamRow): boolean {
   return false;
 }
 
-function findEspnEvent(
+type EspnFixtureMatch = {
+  event: EspnEvent;
+  homeComp: EspnCompetitor;
+  awayComp: EspnCompetitor;
+};
+
+function findEspnFixtureMatch(
   events: EspnEvent[],
   home: TeamRow,
   away: TeamRow,
-): EspnEvent | undefined {
-  return events.find((evt) => {
+): EspnFixtureMatch | undefined {
+  for (const evt of events) {
     const comp = evt.competitions[0];
-    if (!comp) return false;
-    const hComp = comp.competitors.find((c) => c.homeAway === "home");
-    const aComp = comp.competitors.find((c) => c.homeAway === "away");
-    if (!hComp || !aComp) return false;
-    return matchesTeam(hComp.team, home) && matchesTeam(aComp.team, away);
-  });
+    if (!comp) continue;
+    const homeComp = comp.competitors.find((c) => matchesTeam(c.team, home));
+    const awayComp = comp.competitors.find((c) => matchesTeam(c.team, away));
+    if (homeComp && awayComp && homeComp.team.id !== awayComp.team.id) {
+      return { event: evt, homeComp, awayComp };
+    }
+  }
+  return undefined;
 }
 
 function parseDisplayMinute(displayValue: string): {
@@ -492,12 +500,13 @@ export async function GET(request: NextRequest) {
     const awayTeam = teamMap.get(fixture.away_team_id);
     if (!homeTeam || !awayTeam) continue;
 
-    const espnEvt = findEspnEvent(espnEvents, homeTeam, awayTeam);
-    if (!espnEvt) continue;
+    const espnMatch = findEspnFixtureMatch(espnEvents, homeTeam, awayTeam);
+    if (!espnMatch) continue;
 
+    const espnEvt = espnMatch.event;
     const comp = espnEvt.competitions[0];
-    const hComp = comp?.competitors.find((c) => c.homeAway === "home");
-    const aComp = comp?.competitors.find((c) => c.homeAway === "away");
+    const hComp = espnMatch.homeComp;
+    const aComp = espnMatch.awayComp;
 
     const newHomeScore = hComp ? parseInt(hComp.score, 10) : null;
     const newAwayScore = aComp ? parseInt(aComp.score, 10) : null;
@@ -540,7 +549,7 @@ export async function GET(request: NextRequest) {
         .update({
           home_score: homeScoreVal,
           away_score: awayScoreVal,
-          ...(homePenalties !== null ? { home_penalties: homePenalties, away_penalties: awayPenalties } : {}),
+          ...(homePenalties !== null ? { home_penalty_score: homePenalties, away_penalty_score: awayPenalties } : {}),
           status: newStatus,
           minute: newMinute,
           period_display: newPeriodDisplay,
@@ -631,15 +640,15 @@ export async function GET(request: NextRequest) {
     const awayTeam = teamMap.get(fixture.away_team_id);
     if (!homeTeam || !awayTeam) continue;
 
-    const espnEvt = findEspnEvent(espnEvents, homeTeam, awayTeam);
-    if (!espnEvt) continue;
+    const espnMatch = findEspnFixtureMatch(espnEvents, homeTeam, awayTeam);
+    if (!espnMatch) continue;
 
-    const comp = espnEvt.competitions[0];
+    const comp = espnMatch.event.competitions[0];
     const details = comp?.details ?? [];
     if (details.length === 0) continue;
 
-    const hComp = comp.competitors.find((c) => c.homeAway === "home");
-    const aComp = comp.competitors.find((c) => c.homeAway === "away");
+    const hComp = espnMatch.homeComp;
+    const aComp = espnMatch.awayComp;
     const espnIdToTeamId = new Map<string, string>();
     if (hComp) espnIdToTeamId.set(hComp.team.id, fixture.home_team_id);
     if (aComp) espnIdToTeamId.set(aComp.team.id, fixture.away_team_id);
@@ -663,12 +672,11 @@ export async function GET(request: NextRequest) {
     const awayTeam = teamMap.get(fixture.away_team_id);
     if (!homeTeam || !awayTeam) continue;
 
-    const espnEvt = findEspnEvent(espnEvents, homeTeam, awayTeam);
-    if (!espnEvt) continue;
+    const espnMatch = findEspnFixtureMatch(espnEvents, homeTeam, awayTeam);
+    if (!espnMatch) continue;
 
-    const comp = espnEvt.competitions[0];
-    const hComp = comp?.competitors.find((c) => c.homeAway === "home");
-    const aComp = comp?.competitors.find((c) => c.homeAway === "away");
+    const hComp = espnMatch.homeComp;
+    const aComp = espnMatch.awayComp;
 
     const homeScoreVal = hComp ? parseInt(hComp.score, 10) : NaN;
     const awayScoreVal = aComp ? parseInt(aComp.score, 10) : NaN;
@@ -687,7 +695,7 @@ export async function GET(request: NextRequest) {
       .update({
         home_score: homeScoreVal,
         away_score: awayScoreVal,
-        ...(homePenalties !== null ? { home_penalties: homePenalties, away_penalties: awayPenalties } : {}),
+        ...(homePenalties !== null ? { home_penalty_score: homePenalties, away_penalty_score: awayPenalties } : {}),
         source_updated_at: now.toISOString(),
         updated_at: now.toISOString(),
       })
@@ -714,8 +722,9 @@ export async function GET(request: NextRequest) {
     const awayTeam = teamMap.get(fixture.away_team_id);
     if (!homeTeam || !awayTeam) continue;
 
-    const espnEvt = findEspnEvent(espnEvents, homeTeam, awayTeam);
-    if (!espnEvt) continue;
+    const espnMatch = findEspnFixtureMatch(espnEvents, homeTeam, awayTeam);
+    if (!espnMatch) continue;
+    const espnEvt = espnMatch.event;
 
     const { count: lineupCount } = await supabase
       .from("fixture_lineups")
@@ -728,9 +737,8 @@ export async function GET(request: NextRequest) {
     const summary = await fetchEspnSummary(espnEvt.id);
     if (!summary?.rosters?.length) continue;
 
-    const comp = espnEvt.competitions[0];
-    const hComp = comp?.competitors.find((c) => c.homeAway === "home");
-    const aComp = comp?.competitors.find((c) => c.homeAway === "away");
+    const hComp = espnMatch.homeComp;
+    const aComp = espnMatch.awayComp;
     const espnIdToTeamId = new Map<string, string>();
     if (hComp) espnIdToTeamId.set(hComp.team.id, fixture.home_team_id);
     if (aComp) espnIdToTeamId.set(aComp.team.id, fixture.away_team_id);
