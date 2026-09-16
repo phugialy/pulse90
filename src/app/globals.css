@@ -35,6 +35,34 @@ a {
 }
 
 .closing-page {
+  --lift: 0px;
+  --copy-x: 0px;
+  --copy-y: 0px;
+  --orbit-tilt-x: 0deg;
+  --orbit-tilt-y: 0deg;
+  --orbit-x: 0px;
+  --orbit-y: 0px;
+  --panel-a-rotate-x: 4deg;
+  --panel-a-rotate-y: 28deg;
+  --panel-a-x: 0px;
+  --panel-a-y: 0px;
+  --panel-b-rotate-x: 3deg;
+  --panel-b-rotate-y: -30deg;
+  --panel-b-x: 0px;
+  --panel-b-y: 0px;
+  --panel-c-rotate-x: -2deg;
+  --panel-c-rotate-y: 24deg;
+  --panel-c-x: 0px;
+  --panel-c-y: 0px;
+  --panel-d-rotate-x: -2deg;
+  --panel-d-rotate-y: -26deg;
+  --panel-d-x: 0px;
+  --panel-d-y: 0px;
+  --stadium-rotate-x: 64deg;
+  --stadium-rotate-z: -3deg;
+  --stadium-y: 12%;
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
   min-height: 100vh;
   overflow-x: hidden;
   background:
@@ -112,6 +140,17 @@ a {
   color: white;
 }
 
+.closing-hover-lift {
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform 220ms ease,
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease,
+    opacity 180ms ease;
+}
+
 .closing-hero {
   position: relative;
   z-index: 1;
@@ -130,6 +169,25 @@ a {
   transform-style: preserve-3d;
 }
 
+.closing-stage__hint {
+  position: absolute;
+  top: 9%;
+  left: 50%;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(255, 207, 60, 0.24);
+  border-radius: 999px;
+  padding: 0.55rem 0.72rem;
+  background: rgba(10, 16, 28, 0.54);
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.72rem;
+  font-weight: 800;
+  transform: translate3d(-50%, calc(var(--lift) * -0.18), 180px);
+  backdrop-filter: blur(14px);
+}
+
 .closing-stadium {
   position: absolute;
   inset: 7% 1% 0;
@@ -143,8 +201,13 @@ a {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     0 28px 90px rgba(0, 0, 0, 0.42);
-  transform: rotateX(64deg) rotateZ(-3deg) translateY(12%) translateZ(-210px);
+  transform:
+    rotateX(var(--stadium-rotate-x))
+    rotateZ(var(--stadium-rotate-z))
+    translateY(var(--stadium-y))
+    translateZ(-210px);
   transform-origin: center bottom;
+  transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .closing-stadium::before {
@@ -187,6 +250,7 @@ a {
   filter: blur(10px);
   opacity: 0.55;
   transform-origin: top;
+  animation: closing-light-sweep 4.8s ease-in-out infinite alternate;
 }
 
 .closing-light-a {
@@ -228,18 +292,57 @@ a {
   position: absolute;
   inset: 0;
   transform-style: preserve-3d;
-  animation: closing-camera 12s ease-in-out infinite alternate;
+  transform:
+    rotateX(var(--orbit-tilt-x))
+    rotateY(var(--orbit-tilt-y))
+    translate3d(var(--orbit-x), var(--orbit-y), 0);
+  transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.closing-orbit::before {
+  position: absolute;
+  top: 49%;
+  left: 50%;
+  width: clamp(11rem, 23vw, 18rem);
+  aspect-ratio: 1;
+  content: "";
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 207, 60, 0.18), transparent 66%);
+  filter: blur(14px);
+  transform: translate3d(-50%, -50%, 30px) scale(1);
+  animation: closing-core-pulse 2.8s ease-in-out infinite;
 }
 
 .pulse-coin {
   position: absolute;
   top: 42%;
   left: 50%;
+  z-index: 7;
   width: clamp(9rem, 22vw, 17rem);
   aspect-ratio: 1;
-  transform: translate3d(-50%, -50%, 120px) rotateX(12deg) rotateY(-24deg);
+  border: 0;
+  padding: 0;
+  background: transparent;
+  transform:
+    translate3d(
+      -50%,
+      calc(-50% + var(--lift)),
+      120px
+    )
+    rotateX(calc(12deg + var(--tilt-x)))
+    rotateY(calc(-24deg + var(--tilt-y)));
   transform-style: preserve-3d;
   animation: closing-coin-float 4.8s ease-in-out infinite;
+  cursor: pointer;
+  transition:
+    filter 240ms ease,
+    transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pulse-coin:hover,
+.pulse-coin:focus-visible {
+  filter: drop-shadow(0 0 42px rgba(255, 207, 60, 0.48));
+  outline: none;
 }
 
 .pulse-coin__rim,
@@ -269,6 +372,20 @@ a {
     0 0 70px rgba(255, 207, 60, 0.32);
   color: #07111f;
   transform: translateZ(20px);
+  overflow: hidden;
+}
+
+.pulse-coin__shine {
+  position: absolute;
+  inset: -25%;
+  background: linear-gradient(
+    105deg,
+    transparent 32%,
+    rgba(255, 255, 255, 0.46) 46%,
+    transparent 58%
+  );
+  transform: translateX(-65%) rotate(8deg);
+  animation: closing-coin-shine 3.6s ease-in-out infinite;
 }
 
 .pulse-coin__mark {
@@ -309,36 +426,97 @@ a {
     0 24px 70px rgba(0, 0, 0, 0.34);
   backdrop-filter: blur(18px);
   transform-style: preserve-3d;
+  transition:
+    opacity 360ms ease,
+    transform 620ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.closing-panel:hover {
+  border-color: rgba(255, 207, 60, 0.33);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 32px 84px rgba(0, 0, 0, 0.42),
+    0 0 36px rgba(255, 207, 60, 0.09);
 }
 
 .closing-panel-fixtures {
   top: 16%;
   left: 6%;
-  transform: rotateY(28deg) rotateX(4deg) translateZ(70px);
+  transform:
+    translate3d(var(--panel-a-x), var(--panel-a-y), 70px)
+    rotateY(var(--panel-a-rotate-y))
+    rotateX(var(--panel-a-rotate-x));
+  animation: closing-panel-float-a 4.7s ease-in-out infinite;
 }
 
 .closing-panel-teams {
   top: 18%;
   right: 2%;
-  transform: rotateY(-30deg) rotateX(3deg) translateZ(45px);
+  transform:
+    translate3d(var(--panel-b-x), var(--panel-b-y), 45px)
+    rotateY(var(--panel-b-rotate-y))
+    rotateX(var(--panel-b-rotate-x));
+  animation: closing-panel-float-b 5.2s ease-in-out infinite;
 }
 
 .closing-panel-standings {
   bottom: 7%;
   left: 11%;
-  transform: rotateY(24deg) rotateX(-2deg) translateZ(30px);
+  transform:
+    translate3d(var(--panel-c-x), var(--panel-c-y), 30px)
+    rotateY(var(--panel-c-rotate-y))
+    rotateX(var(--panel-c-rotate-x));
+  animation: closing-panel-float-c 5.5s ease-in-out infinite;
 }
 
 .closing-panel-flow {
   right: 8%;
   bottom: 8%;
-  transform: rotateY(-26deg) rotateX(-2deg) translateZ(65px);
+  transform:
+    translate3d(var(--panel-d-x), var(--panel-d-y), 65px)
+    rotateY(var(--panel-d-rotate-y))
+    rotateX(var(--panel-d-rotate-x));
+  animation: closing-panel-float-d 4.9s ease-in-out infinite;
+}
+
+.closing-status-dot {
+  display: block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: #3ef0b0;
+  box-shadow: 0 0 18px rgba(62, 240, 176, 0.65);
+  animation: closing-status-pulse 1.8s ease-in-out infinite;
+}
+
+.closing-portal {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  z-index: 2;
+  width: 8rem;
+  aspect-ratio: 1;
+  pointer-events: none;
+  border: 1px solid rgba(255, 207, 60, 0.36);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, rgba(255, 207, 60, 0.38), rgba(102, 166, 255, 0.08) 44%, transparent 66%);
+  opacity: 0;
+  filter: blur(4px);
+  transform: translate3d(-50%, -50%, 82px) scale(0.4);
+  transition:
+    opacity 500ms ease,
+    transform 1100ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .closing-copy {
   position: relative;
   z-index: 3;
   max-width: 39rem;
+  transform: translate3d(var(--copy-x), var(--copy-y), 0);
+  transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .closing-kicker {
@@ -416,6 +594,9 @@ a {
   align-items: center;
   gap: 0.45rem;
   margin-top: 2.8rem;
+  border: 0;
+  padding: 0;
+  background: transparent;
   color: rgba(255, 255, 255, 0.48);
   font-size: 0.8rem;
   font-weight: 800;
@@ -504,10 +685,114 @@ a {
 @keyframes closing-coin-float {
   0%,
   100% {
-    transform: translate3d(-50%, -52%, 120px) rotateX(12deg) rotateY(-24deg);
+    margin-top: -0.7rem;
   }
   50% {
-    transform: translate3d(-50%, -47%, 145px) rotateX(16deg) rotateY(18deg);
+    margin-top: 0.7rem;
+  }
+}
+
+@keyframes closing-light-sweep {
+  from {
+    opacity: 0.32;
+  }
+  to {
+    opacity: 0.66;
+  }
+}
+
+@keyframes closing-core-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translate3d(-50%, -50%, 30px) scale(0.92);
+  }
+  50% {
+    opacity: 0.68;
+    transform: translate3d(-50%, -50%, 30px) scale(1.08);
+  }
+}
+
+@keyframes closing-coin-shine {
+  0%,
+  28% {
+    transform: translateX(-72%) rotate(8deg);
+  }
+  62%,
+  100% {
+    transform: translateX(72%) rotate(8deg);
+  }
+}
+
+@keyframes closing-panel-float-a {
+  0%,
+  100% { margin-top: -0.35rem; }
+  50% { margin-top: 0.35rem; }
+}
+
+@keyframes closing-panel-float-b {
+  0%,
+  100% { margin-top: 0.28rem; }
+  50% { margin-top: -0.42rem; }
+}
+
+@keyframes closing-panel-float-c {
+  0%,
+  100% { margin-bottom: 0.24rem; }
+  50% { margin-bottom: -0.36rem; }
+}
+
+@keyframes closing-panel-float-d {
+  0%,
+  100% { margin-bottom: -0.28rem; }
+  50% { margin-bottom: 0.38rem; }
+}
+
+@keyframes closing-status-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.86);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.14);
+  }
+}
+
+.is-entering-archive .closing-copy,
+.is-entering-archive .closing-nav {
+  opacity: 0.24;
+}
+
+.is-entering-archive .closing-panel {
+  opacity: 0.28;
+  transform: translate3d(0, 0, -180px) scale(0.88);
+}
+
+.is-entering-archive .pulse-coin {
+  transform: translate3d(-50%, -50%, 330px) rotateX(0deg) rotateY(0deg) scale(1.22);
+  filter: drop-shadow(0 0 72px rgba(255, 207, 60, 0.72));
+}
+
+.is-entering-archive .closing-portal {
+  opacity: 1;
+  transform: translate3d(-50%, -50%, 120px) scale(3.9);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .closing-hover-lift:hover {
+    animation: closing-hover-bob 1.25s ease-in-out infinite;
+  }
+}
+
+@keyframes closing-hover-bob {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -4px;
   }
 }
 
@@ -558,6 +843,10 @@ a {
     width: 10.8rem;
   }
 
+  .closing-stage__hint {
+    display: none;
+  }
+
   .closing-panel {
     width: 13.6rem;
     min-height: 10.6rem;
@@ -593,11 +882,26 @@ a {
 
 @media (prefers-reduced-motion: reduce) {
   .closing-orbit,
-  .pulse-coin {
+  .pulse-coin,
+  .closing-panel,
+  .closing-light,
+  .pulse-coin__shine,
+  .closing-orbit::before,
+  .closing-status-dot,
+  .closing-hover-lift:hover {
     animation: none;
   }
 
   .closing-primary:hover {
     transform: none;
+  }
+
+  .closing-page,
+  .closing-copy,
+  .closing-stadium,
+  .closing-orbit,
+  .pulse-coin,
+  .closing-panel {
+    transition: none;
   }
 }
