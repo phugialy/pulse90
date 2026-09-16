@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Mail, MousePointer2, Sparkles } from "lucide-react";
+import { ArrowUpRight, Mail, MousePointer2, Sparkles, X } from "lucide-react";
 
 const archivePanels = [
   {
@@ -180,18 +180,44 @@ export function ClosingExperience() {
 
   const enterArchive = useCallback(() => {
     setEntered(true);
-    window.setTimeout(() => {
-      document.getElementById("craft")?.scrollIntoView({ behavior: "smooth" });
-    }, 980);
   }, []);
+
+  const closeArchive = useCallback(() => {
+    setEntered(false);
+    resetPointer();
+  }, [resetPointer]);
+
+  const handleMainClick = useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      if (!entered) return;
+      const target = event.target as HTMLElement;
+      if (target.closest(".pulse-coin, .closing-archive-message")) return;
+      closeArchive();
+    },
+    [closeArchive, entered],
+  );
 
   useEffect(() => {
     window.addEventListener("blur", resetPointer);
     return () => window.removeEventListener("blur", resetPointer);
   }, [resetPointer]);
 
+  useEffect(() => {
+    if (!entered) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeArchive();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [closeArchive, entered]);
+
   return (
-    <main className={`closing-page ${entered ? "is-entering-archive" : ""}`}>
+    <main
+      className={`closing-page ${entered ? "is-entering-archive" : ""}`}
+      onClick={handleMainClick}
+    >
       <header className="closing-nav" aria-label="Pulse90 closing navigation">
         <Link className="closing-logo closing-hover-lift" href="/">
           <span className="closing-logo__coin">90</span>
@@ -252,6 +278,41 @@ export function ClosingExperience() {
             ))}
           </div>
           <div className="closing-portal" aria-hidden="true" />
+          <aside
+            aria-live="polite"
+            className="closing-archive-message"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              aria-label="Close archive message"
+              className="closing-archive-message__close"
+              onClick={closeArchive}
+              type="button"
+            >
+              <X className="size-4" />
+            </button>
+            <p className="closing-kicker">Thank you for watching</p>
+            <h2>Pulse90 has reached full time.</h2>
+            <p>
+              This archive is a thank-you note to everyone who checked fixtures,
+              teams, standings, and match context through the watch desk.
+            </p>
+            <p>
+              The live data layer is retired, but the product thinking, interface
+              craft, and interactive web direction are still available through
+              Phugialy.
+            </p>
+            <div className="closing-archive-message__actions">
+              <a href="https://phugialy.com" rel="noreferrer" target="_blank">
+                Start a project
+                <ArrowUpRight className="size-4" />
+              </a>
+              <a href="mailto:phu@phugialy.com">
+                <Mail className="size-4" />
+                Email Phu
+              </a>
+            </div>
+          </aside>
         </div>
 
         <div className="closing-copy">
@@ -311,6 +372,43 @@ export function ClosingExperience() {
             <p>
               This final build is static, fast, and Vercel-hosted without live
               scores, Supabase calls, or scheduled data jobs.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section className="closing-seo" aria-label="About Pulse90">
+        <div>
+          <p className="closing-kicker">About the archive</p>
+          <h2>What was Pulse90?</h2>
+          <p>
+            Pulse90 was a World Cup watch desk built to help football fans scan
+            fixtures, live context, team paths, standings, match flow, and tournament
+            storylines without bouncing between noisy sports pages.
+          </p>
+        </div>
+        <div className="closing-seo-grid">
+          <article>
+            <h3>Why is Pulse90 retired?</h3>
+            <p>
+              The live World Cup data experience has closed. This static final
+              archive preserves the product idea without Supabase, cron jobs, or
+              live score updates.
+            </p>
+          </article>
+          <article>
+            <h3>Who built this interactive website?</h3>
+            <p>
+              Pulse90 was designed and built by Phugialy as an interactive sports
+              information product and closing portfolio artifact.
+            </p>
+          </article>
+          <article>
+            <h3>Can I commission something like this?</h3>
+            <p>
+              Yes. For a custom website, product interface, interactive launch page,
+              or 3D-inspired archive page, visit phugialy.com or email
+              phu@phugialy.com.
             </p>
           </article>
         </div>
