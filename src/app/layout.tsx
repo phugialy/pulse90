@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://pulse90.loxys.co";
-const SITE_TITLE = "Pulse90 | World Cup 2026 Watch Desk";
+const SITE_TITLE = "Pulse90 | Final Whistle";
 const SITE_DESCRIPTION =
-  "Open once. Know what matters. Pulse90 is a daily match desk for World Cup 2026 — fixtures, live scores, group standings, and match context all in one place.";
+  "Pulse90 is retiring its live World Cup watch desk. The final archive points visitors to Phugialy for custom interactive websites.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
