@@ -229,6 +229,14 @@ export function ClosingExperience() {
             <Sparkles className="size-3.5" />
             <span>Click the badge to enter the archive</span>
           </div>
+          <div className="closing-broadcast-world" aria-hidden="true">
+            <span className="closing-tunnel-ring closing-tunnel-ring-a" />
+            <span className="closing-tunnel-ring closing-tunnel-ring-b" />
+            <span className="closing-tunnel-ring closing-tunnel-ring-c" />
+            <span className="closing-ribbon closing-ribbon-a" />
+            <span className="closing-ribbon closing-ribbon-b" />
+            <span className="closing-audience-lights" />
+          </div>
           <div className="closing-stadium" aria-hidden="true">
             <span className="closing-light closing-light-a" />
             <span className="closing-light closing-light-b" />
